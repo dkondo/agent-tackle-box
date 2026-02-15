@@ -19,10 +19,21 @@ class StatePanel(Static):
         self._state: dict[str, Any] = {}
         self._messages_expanded: bool = False
         self._current_node: str | None = None
+        self._custom_lines: list[str] | None = None
 
     def update_state(self, state: dict[str, Any]) -> None:
         """Update the state display."""
         self._state = state
+        self._custom_lines = None
+        self._refresh_display()
+
+    def update_custom_lines(
+        self, lines: list[str], *, state: dict[str, Any] | None = None
+    ) -> None:
+        """Update the state display with pre-rendered lines."""
+        if state is not None:
+            self._state = state
+        self._custom_lines = lines
         self._refresh_display()
 
     def set_current_node(self, node: str | None) -> None:
@@ -65,6 +76,14 @@ class StatePanel(Static):
             lines.append(
                 f"[bold magenta]node:[/bold magenta] {self._current_node}"
             )
+
+        if self._custom_lines is not None:
+            if self._custom_lines:
+                lines.extend(self._custom_lines)
+            else:
+                lines.append("[dim]No state yet.[/dim]")
+            self.update(Text.from_markup("\n".join(lines)))
+            return
 
         values = self._state
 

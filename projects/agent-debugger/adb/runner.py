@@ -20,6 +20,7 @@ from adb.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
+from adb.store_backend import snapshot_backend_store
 from adb.tracer import AgentTracer
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,9 @@ class AgentRunner:
         event_queue: Queue,
         command_queue: Queue,
         bp_manager: BreakpointManager,
+        store_namespace_prefix: tuple[str, ...] | None = None,
+        store_max_namespaces: int = 20,
+        store_items_per_namespace: int = 20,
     ) -> None:
         self.graph = graph
         self.event_queue = event_queue
@@ -54,6 +58,9 @@ class AgentRunner:
         self._run_count: int = 0
         self._seen_tool_results: set[tuple[str, str, str]] = set()
         self._last_state_signature: str | None = None
+        self._store_namespace_prefix = store_namespace_prefix
+        self._store_max_namespaces = store_max_namespaces
+        self._store_items_per_namespace = store_items_per_namespace
 
     def configure(
         self,
@@ -248,10 +255,23 @@ class AgentRunner:
         next_nodes: list[str] | None = None,
     ) -> None:
         """Emit StateUpdateEvent only when state changed."""
+        store_items, store_source, store_error = self.get_store_snapshot()
+
         try:
-            signature = json.dumps(values, sort_keys=True, default=str)
+            signature = json.dumps(
+                {
+                    "values": values,
+                    "store_items": store_items,
+                    "store_source": store_source,
+                    "store_error": store_error,
+                },
+                sort_keys=True,
+                default=str,
+            )
         except Exception:
-            signature = str(values)
+            signature = str(
+                (values, store_items, store_source, store_error)
+            )
 
         if signature == self._last_state_signature:
             return
@@ -260,9 +280,23 @@ class AgentRunner:
         self.event_queue.put(
             StateUpdateEvent(
                 values=values,
+                store_items=store_items,
+                store_source=store_source,
+                store_error=store_error,
                 step=step,
                 next_nodes=next_nodes or [],
             )
+        )
+
+    def get_store_snapshot(
+        self,
+    ) -> tuple[dict[str, dict[str, Any]], str, str | None]:
+        """Read a normalized snapshot from the graph backend store."""
+        return snapshot_backend_store(
+            self.graph,
+            namespace_prefix=self._store_namespace_prefix,
+            max_namespaces=self._store_max_namespaces,
+            max_items_per_namespace=self._store_items_per_namespace,
         )
 
     def _emit_agent_response(self, msg: Any) -> None:

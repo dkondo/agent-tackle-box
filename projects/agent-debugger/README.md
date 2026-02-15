@@ -17,8 +17,23 @@ adb attach my_module:graph
 # Attach with optional renderers/providers
 adb attach my_module:graph \
   --memory-renderer my_mod:MemoryRenderer \
+  --store-renderer my_mod:StoreRenderer \
+  --state-renderer my_mod:StateRenderer \
   --output-renderer my_mod:ChatOutputRenderer \
-  --state-mutation-provider my_mod:StateMutationProvider
+  --state-mutator my_mod:StateMutator
+```
+
+## Run from Source
+
+```bash
+# Create/update local env from this repo
+uv sync --dev
+
+# Run adb directly from source (project root)
+uv run adb run examples/simple_agent.py
+
+# Equivalent module invocation
+uv run python -m adb.cli run examples/simple_agent.py
 ```
 
 ## Features
@@ -26,7 +41,7 @@ adb attach my_module:graph \
 - **Application-level debugging**: See agent state, messages, tool calls, state diffs
 - **Code-level debugging**: Set breakpoints, step through code, inspect variables
 - **Agent-level breakpoints**: Break on node start, tool call, or state change
-- **Optional renderers/providers**: Custom memory, chat output, and state mutation hooks
+- **Optional renderers/providers**: Custom state, store, memory, chat output, and state mutation hooks
 - **`import adb; adb.set_trace()`**: Drop into the debugger from anywhere in your agent code
 
 ## Usage
@@ -47,7 +62,7 @@ adb attach my_module:graph \
 # Clear local UI context
 /clear
 
-# Local clear + optional provider mutation
+# Local clear + optional mutator mutation
 /clear memory
 ```
 

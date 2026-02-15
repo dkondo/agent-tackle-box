@@ -21,6 +21,7 @@ from adb.events import (
 from adb.extensions import (
     ChatRenderModel,
     MemoryRenderModel,
+    StateRenderModel,
     StateMutationResult,
 )
 from adb.runner import AgentRunner
@@ -58,8 +59,10 @@ def _simple_agent_break_line() -> int:
 
 def _make_app(
     memory_renderer=None,
+    store_renderer=None,
+    state_renderer=None,
     output_renderer=None,
-    state_mutation_provider=None,
+    state_mutator=None,
 ):
     """Create a DebuggerApp for testing."""
     graph = _make_graph()
@@ -71,8 +74,10 @@ def _make_app(
         runner=runner,
         bp_manager=bp,
         memory_renderer=memory_renderer,
+        store_renderer=store_renderer,
+        state_renderer=state_renderer,
         output_renderer=output_renderer,
-        state_mutation_provider=state_mutation_provider,
+        state_mutator=state_mutator,
     )
 
 
@@ -349,8 +354,113 @@ async def test_tab_navigation_slash_commands():
 
 
 @pytest.mark.asyncio
-async def test_memory_renderer_is_used_for_state_updates():
-    """Custom memory renderer should replace generic store display."""
+async def test_memory_renderer_is_used_for_backend_store_snapshots():
+    """Legacy memory renderer should only customize backend store snapshots."""
+
+    class _MemoryRenderer:
+        def render_memory(self, snapshot):
+            return MemoryRenderModel(lines=["[bold]custom memory[/bold]"])
+
+    app = _make_app(memory_renderer=_MemoryRenderer())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            StateUpdateEvent(
+                values={"memory": {"k": "v"}},
+                store_items={"memories/u1": {"k": "v"}},
+                store_source="backend",
+                step=1,
+            )
+        )
+        await pilot.pause()
+        store_panel = app.query_one("#store-panel")
+        assert store_panel.custom_lines == ["[bold]custom memory[/bold]"]
+
+
+@pytest.mark.asyncio
+async def test_store_auto_expands_when_memory_first_appears():
+    """Store panel should auto-expand on first non-empty backend store snapshot."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        store_collapsible = app.query_one("#store-collapsible")
+        assert store_collapsible.collapsed is True
+
+        app._handle_event(StateUpdateEvent(values={"foo": "bar"}, step=1))
+        await pilot.pause()
+        assert store_collapsible.collapsed is True
+
+        app._handle_event(
+            StateUpdateEvent(
+                values={"foo": "bar"},
+                store_items={"memories/user-1": {"k": {"v": 1}}},
+                store_source="backend",
+                step=2,
+            )
+        )
+        await pilot.pause()
+        assert store_collapsible.collapsed is False
+
+
+@pytest.mark.asyncio
+async def test_store_stays_visible_across_breakpoint_step_hits():
+    """Store should stay visible while stepping at breakpoints with store data."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        store_collapsible = app.query_one("#store-collapsible")
+        frame = sys._getframe()
+
+        app._handle_event(
+            StateUpdateEvent(
+                values={"x": 1},
+                store_items={"memories/user-1": {"k": {"v": 1}}},
+                store_source="backend",
+                step=1,
+            )
+        )
+        await pilot.pause()
+        assert store_collapsible.collapsed is False
+
+        # Simulate another step stop and ensure store is still shown.
+        store_collapsible.collapsed = True
+        app._suppress_breakpoint_chat_once = True
+        second = BreakpointHit(
+            frame=frame,
+            filename=frame.f_code.co_filename,
+            lineno=frame.f_lineno + 1,
+            node="echo",
+            graph_state={"x": 1},
+        )
+        app._handle_event(second)
+        await pilot.pause()
+        assert store_collapsible.collapsed is False
+
+
+@pytest.mark.asyncio
+async def test_memory_renderer_failure_falls_back_to_generic_store():
+    """Renderer errors should fall back to generic backend store panel."""
+
+    class _BrokenMemoryRenderer:
+        def render_memory(self, snapshot):
+            raise RuntimeError("boom")
+
+    app = _make_app(memory_renderer=_BrokenMemoryRenderer())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            StateUpdateEvent(
+                values={"memory": {"k": "v"}},
+                store_items={"memories/u1": {"k": "v"}},
+                store_source="backend",
+                step=1,
+            )
+        )
+        await pilot.pause()
+        store_panel = app.query_one("#store-panel")
+        assert store_panel.custom_lines is None
+        assert store_panel.items == {"memories/u1": {"k": "v"}}
+
+
+@pytest.mark.asyncio
+async def test_memory_renderer_is_ignored_without_backend_store_snapshot():
+    """No backend store should not fall back to state-derived memory."""
 
     class _MemoryRenderer:
         def render_memory(self, snapshot):
@@ -363,79 +473,49 @@ async def test_memory_renderer_is_used_for_state_updates():
         )
         await pilot.pause()
         store_panel = app.query_one("#store-panel")
-        assert store_panel.custom_lines == ["[bold]custom memory[/bold]"]
+        assert store_panel.custom_lines is None
+        assert store_panel.items == {}
 
 
 @pytest.mark.asyncio
-async def test_store_auto_expands_when_memory_first_appears():
-    """Store panel should auto-expand on first non-empty memory appearance."""
-    app = _make_app()
-    async with app.run_test(size=(120, 40)) as pilot:
-        store_collapsible = app.query_one("#store-collapsible")
-        assert store_collapsible.collapsed is True
+async def test_store_renderer_is_used_for_backend_snapshots():
+    """Custom store renderer should render backend store snapshot lines."""
 
-        app._handle_event(StateUpdateEvent(values={"foo": "bar"}, step=1))
-        await pilot.pause()
-        assert store_collapsible.collapsed is True
+    class _StoreRenderer:
+        def render_store(self, snapshot):
+            return MemoryRenderModel(lines=["[bold]custom store[/bold]"])
 
-        app._handle_event(
-            StateUpdateEvent(values={"memory": {"turn_count": 1}}, step=2)
-        )
-        await pilot.pause()
-        assert store_collapsible.collapsed is False
-
-
-@pytest.mark.asyncio
-async def test_store_stays_visible_across_breakpoint_step_hits():
-    """Store should stay visible while stepping at breakpoints with memory."""
-    app = _make_app()
-    async with app.run_test(size=(120, 40)) as pilot:
-        store_collapsible = app.query_one("#store-collapsible")
-        frame = sys._getframe()
-
-        first = BreakpointHit(
-            frame=frame,
-            filename=frame.f_code.co_filename,
-            lineno=frame.f_lineno,
-            node="echo",
-            graph_state={"memory": {"turn_count": 1}},
-        )
-        app._handle_event(first)
-        await pilot.pause()
-        assert store_collapsible.collapsed is False
-
-        # Simulate another step stop and ensure store is still shown.
-        store_collapsible.collapsed = True
-        app._suppress_breakpoint_chat_once = True
-        second = BreakpointHit(
-            frame=frame,
-            filename=frame.f_code.co_filename,
-            lineno=frame.f_lineno + 1,
-            node="echo",
-            graph_state={"memory": {"turn_count": 1}},
-        )
-        app._handle_event(second)
-        await pilot.pause()
-        assert store_collapsible.collapsed is False
-
-
-@pytest.mark.asyncio
-async def test_memory_renderer_failure_falls_back_to_generic_store():
-    """Renderer errors should fall back to generic memory/store panel."""
-
-    class _BrokenMemoryRenderer:
-        def render_memory(self, snapshot):
-            raise RuntimeError("boom")
-
-    app = _make_app(memory_renderer=_BrokenMemoryRenderer())
+    app = _make_app(store_renderer=_StoreRenderer())
     async with app.run_test(size=(120, 40)) as pilot:
         app._handle_event(
-            StateUpdateEvent(values={"memory": {"k": "v"}}, step=1)
+            StateUpdateEvent(
+                values={"x": 1},
+                store_items={"memories/u": {"k": "v"}},
+                store_source="backend",
+                step=1,
+            )
         )
         await pilot.pause()
         store_panel = app.query_one("#store-panel")
-        assert store_panel.custom_lines is None
-        assert store_panel.items["memory"] == {"k": "v"}
+        assert store_panel.custom_lines == ["[bold]custom store[/bold]"]
+
+
+@pytest.mark.asyncio
+async def test_state_renderer_is_used_for_state_updates():
+    """Custom state renderer should replace default state panel rendering."""
+
+    class _StateRenderer:
+        def render_state(self, snapshot):
+            return StateRenderModel(lines=["[bold]custom state[/bold]"])
+
+    app = _make_app(state_renderer=_StateRenderer())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(StateUpdateEvent(values={"foo": "bar"}, step=1))
+        await pilot.pause()
+        state_panel = app.query_one("#state-panel")
+        rendered = state_panel.renderable
+        assert rendered is not None
+        assert "custom state" in rendered.plain
 
 
 @pytest.mark.asyncio
@@ -469,7 +549,7 @@ async def test_output_renderer_handles_claimed_payload():
 
 
 @pytest.mark.asyncio
-async def test_clear_command_calls_state_mutation_provider():
+async def test_clear_command_calls_state_mutator():
     """`/clear <mutation>` should clear local state and invoke provider."""
 
     class _Provider:
@@ -486,7 +566,7 @@ async def test_clear_command_calls_state_mutation_provider():
             )
 
     provider = _Provider()
-    app = _make_app(state_mutation_provider=provider)
+    app = _make_app(state_mutator=provider)
     app._current_state = {"memory": {"x": 1}, "messages": [{"role": "ai"}]}
 
     async with app.run_test(size=(120, 40)) as pilot:
@@ -816,7 +896,83 @@ def test_runner_emits_state_update_for_simple_agent_values_mode():
             break
 
     assert states, "Expected at least one StateUpdateEvent"
-    assert any("memory" in state for state in states)
+    assert any("messages" in state for state in states)
+
+
+def test_runner_emits_backend_store_items_when_store_available():
+    """Runner should include backend store snapshot in state update events."""
+
+    class _Item:
+        def __init__(self, key, value):
+            self.key = key
+            self.value = value
+
+    class _Store:
+        def list_namespaces(self, **kwargs):
+            return [("memories", "u1")]
+
+        def search(self, namespace_prefix, **kwargs):
+            if namespace_prefix == ("memories", "u1"):
+                return [_Item("a", {"x": 1})]
+            return []
+
+    class _Graph:
+        def __init__(self):
+            self.store = _Store()
+
+        def stream(self, input_data, config=None, stream_mode=None):
+            yield ("values", {"messages": [{"role": "ai", "content": "ok"}]})
+
+    eq = Queue()
+    runner = AgentRunner(
+        graph=_Graph(),  # type: ignore[arg-type]
+        event_queue=eq,
+        command_queue=Queue(),
+        bp_manager=BreakpointManager(),
+    )
+    runner.invoke("hello")
+
+    event = None
+    for _ in range(100):
+        try:
+            candidate = eq.get(timeout=0.1)
+        except Exception:
+            continue
+        if isinstance(candidate, StateUpdateEvent):
+            event = candidate
+            break
+
+    assert event is not None
+    assert event.store_source == "backend"
+    assert event.store_items == {"memories/u1": {"a": {"x": 1}}}
+
+
+def test_runner_reports_store_none_when_no_backend_store():
+    """Runner should explicitly report missing backend store."""
+    from examples.simple_agent import graph
+
+    eq = Queue()
+    runner = AgentRunner(
+        graph=graph,
+        event_queue=eq,
+        command_queue=Queue(),
+        bp_manager=BreakpointManager(),
+    )
+    runner.invoke("hello")
+
+    event = None
+    for _ in range(100):
+        try:
+            candidate = eq.get(timeout=0.1)
+        except Exception:
+            continue
+        if isinstance(candidate, StateUpdateEvent):
+            event = candidate
+            break
+
+    assert event is not None
+    assert event.store_source in {"none", "unsupported", "error"}
+    assert event.store_items == {}
 
 
 def test_update_input_placeholder_logs_widget_errors(monkeypatch):

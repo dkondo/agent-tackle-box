@@ -1,3 +1,15 @@
 [
-  "/continue"
+  "/continue",
+  "/break node greeter",
+  "hi",
+  "wow",
+  "/break node greeter",
+  "hello",
+  "this is neat",
+  "so cool",
+  "/clear br",
+  "wow",
+  "/break",
+  "/clear --help",
+  "/clear"
 ]

@@ -44,8 +44,10 @@ from adb.events import (
 from adb.extensions import (
     ChatOutputRenderer,
     MemoryRenderer,
-    StateMutationProvider,
+    StateRenderer,
+    StateMutator,
     StateMutationResult,
+    StoreRenderer,
 )
 from adb.panels.diff import DiffPanel
 from adb.panels.logs import LogsPanel
@@ -177,16 +179,21 @@ class DebuggerApp(App):
         runner: AgentRunner,
         bp_manager: BreakpointManager,
         memory_renderer: MemoryRenderer | None = None,
+        store_renderer: StoreRenderer | None = None,
+        state_renderer: StateRenderer | None = None,
         output_renderer: ChatOutputRenderer | None = None,
-        state_mutation_provider: StateMutationProvider | None = None,
+        state_mutator: StateMutator | None = None,
+        state_mutation_provider: StateMutator | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.runner = runner
         self.bp_manager = bp_manager
         self.memory_renderer = memory_renderer
+        self.store_renderer = store_renderer
+        self.state_renderer = state_renderer
         self.output_renderer = output_renderer
-        self.state_mutation_provider = state_mutation_provider
+        self.state_mutator = state_mutator or state_mutation_provider
         self.event_queue: Queue = runner.event_queue
         self.command_queue: Queue = runner.command_queue
         self._processing = False
@@ -201,7 +208,7 @@ class DebuggerApp(App):
         self._previous_state: dict[str, Any] | None = None
         self._current_state: dict[str, Any] = {}
         self._suppress_breakpoint_chat_once = False
-        self._last_state_had_memory = False
+        self._last_store_had_data = False
         self._poll_timer = None
 
     def compose(self) -> ComposeResult:
@@ -494,8 +501,7 @@ class DebuggerApp(App):
 
         elif isinstance(event, StateUpdateEvent):
             self._current_state = event.values
-            state_panel = self.query_one("#state-panel", StatePanel)
-            state_panel.update_state(event.values)
+            self._update_state_panel(event.values)
 
             # Update messages panel
             messages = event.values.get("messages", [])
@@ -510,8 +516,8 @@ class DebuggerApp(App):
             diff_panel.update_diff(
                 self._previous_state, event.values
             )
-            self._update_memory_panel(event.values)
-            self._maybe_auto_expand_store(event.values)
+            self._update_store_panel(event)
+            self._maybe_auto_expand_store(event.store_items)
 
         elif isinstance(event, BreakpointHit):
             self._handle_breakpoint(event)
@@ -603,9 +609,8 @@ class DebuggerApp(App):
 
         # Update state with graph context
         if event.graph_state:
-            state_panel = self.query_one("#state-panel", StatePanel)
-            state_panel.update_state(event.graph_state)
-        self._ensure_store_visible_at_breakpoint(event.graph_state)
+            self._update_state_panel(event.graph_state)
+        self._ensure_store_visible_at_breakpoint()
 
         node_info = f" in {event.node}" if event.node else ""
         self._log(
@@ -667,54 +672,103 @@ class DebuggerApp(App):
             chat_log.write(Text.from_markup(str(line)))
         return True
 
-    def _update_memory_panel(self, state: dict[str, Any]) -> None:
-        """Update the memory/store panel via optional renderer."""
-        panel = self.query_one("#store-panel", StorePanel)
+    def _update_state_panel(self, state: dict[str, Any]) -> None:
+        """Update state panel via optional state renderer."""
+        panel = self.query_one("#state-panel", StatePanel)
         snapshot = {"state": state}
-
-        renderer = self.memory_renderer
+        renderer = self.state_renderer
         if renderer is not None:
             try:
-                model = renderer.render_memory(snapshot)
+                model = renderer.render_state(snapshot)
+            except Exception as e:
+                self._log(f"State renderer failed: {e}", "warning")
+            else:
+                lines = self._normalize_lines(model)
+                if lines is not None:
+                    panel.update_custom_lines(lines, state=state)
+                    return
+
+        panel.update_state(state)
+
+    def _update_store_panel(self, event: StateUpdateEvent) -> None:
+        """Update the backend store panel via optional renderers."""
+        panel = self.query_one("#store-panel", StorePanel)
+        has_backend_snapshot = event.store_source in {
+            "backend",
+            "backend-legacy",
+        }
+        snapshot = {
+            "state": event.values,
+            "store_items": event.store_items,
+            "store_source": event.store_source,
+            "store_error": event.store_error,
+        }
+
+        if self.store_renderer is not None:
+            try:
+                model = self.store_renderer.render_store(snapshot)
+            except Exception as e:
+                self._log(f"Store renderer failed: {e}", "warning")
+            else:
+                lines = self._normalize_lines(model)
+                if lines is not None:
+                    panel.update_custom_lines(
+                        lines,
+                        source=event.store_source,
+                        error=event.store_error,
+                    )
+                    return
+
+        # Backward-compatible hook: allow existing memory renderers to
+        # customize the Store panel for backend snapshots only.
+        if has_backend_snapshot and self.memory_renderer is not None:
+            try:
+                model = self.memory_renderer.render_memory(snapshot)
             except Exception as e:
                 self._log(f"Memory renderer failed: {e}", "warning")
             else:
-                if model is not None:
-                    lines = getattr(model, "lines", None)
-                    if isinstance(lines, str):
-                        lines = [lines]
-                    if isinstance(lines, list):
-                        panel.update_custom_lines(
-                            [str(line) for line in lines]
-                        )
-                        return
+                lines = self._normalize_lines(model)
+                if lines is not None:
+                    panel.update_custom_lines(
+                        lines,
+                        source=event.store_source,
+                        error=event.store_error,
+                    )
+                    return
 
-        generic_items: dict[str, dict[str, Any]] = {}
-        memory = state.get("memory")
-        if isinstance(memory, dict):
-            generic_items["memory"] = memory
+        panel.update_store(
+            event.store_items,
+            source=event.store_source,
+            error=event.store_error,
+        )
 
-        residual = {
-            key: value
-            for key, value in state.items()
-            if key not in {"messages", "memory"}
-        }
-        if residual:
-            generic_items["state"] = residual
+    def _normalize_lines(
+        self, model: Any
+    ) -> list[str] | None:
+        """Coerce renderer output to string lines."""
+        if model is None:
+            return None
+        lines = getattr(model, "lines", None)
+        if isinstance(lines, str):
+            lines = [lines]
+        if isinstance(lines, list):
+            return [str(line) for line in lines]
+        return None
 
-        panel.update_store(generic_items)
+    def _has_visible_store(
+        self, store_items: dict[str, dict[str, Any]]
+    ) -> bool:
+        """Whether backend store currently has entries."""
+        if not store_items:
+            return False
+        return any(bool(entries) for entries in store_items.values())
 
-    def _state_has_visible_memory(self, state: dict[str, Any]) -> bool:
-        """Whether state currently includes non-empty memory."""
-        memory = state.get("memory")
-        if isinstance(memory, dict):
-            return bool(memory)
-        return memory is not None
-
-    def _maybe_auto_expand_store(self, state: dict[str, Any]) -> None:
-        """Auto-expand Store when memory first appears."""
-        has_memory = self._state_has_visible_memory(state)
-        if has_memory and not self._last_state_had_memory:
+    def _maybe_auto_expand_store(
+        self, store_items: dict[str, dict[str, Any]]
+    ) -> None:
+        """Auto-expand Store when backend store data first appears."""
+        has_store = self._has_visible_store(store_items)
+        if has_store and not self._last_store_had_data:
             try:
                 store_collapsible = self.query_one(
                     "#store-collapsible", Collapsible
@@ -722,18 +776,13 @@ class DebuggerApp(App):
                 store_collapsible.collapsed = False
             except Exception as e:
                 self._log(f"Failed to auto-expand store panel: {e}", "warning")
-        self._last_state_had_memory = has_memory
+        self._last_store_had_data = has_store
 
-    def _ensure_store_visible_at_breakpoint(
-        self, graph_state: dict[str, Any] | None
-    ) -> None:
+    def _ensure_store_visible_at_breakpoint(self) -> None:
         """Keep Store visible while stepping through breakpoint stops."""
-        state = (
-            graph_state
-            if isinstance(graph_state, dict)
-            else self._current_state
-        )
-        if not self._state_has_visible_memory(state):
+        panel = self.query_one("#store-panel", StorePanel)
+        has_store = bool(panel.items) or bool(panel.custom_lines)
+        if not has_store:
             return
         try:
             store_collapsible = self.query_one(
@@ -755,25 +804,25 @@ class DebuggerApp(App):
         self._previous_state = None
         self._current_state = {}
         self._last_response_signature = None
-        self._last_state_had_memory = False
+        self._last_store_had_data = False
         self._stop_spinner()
         self._processing = False
 
     def _apply_state_mutation(
         self, mutation: str, args: list[str]
     ) -> StateMutationResult:
-        """Apply a generic state mutation via provider when configured."""
-        if self.state_mutation_provider is None:
+        """Apply a generic state mutation via mutator when configured."""
+        if self.state_mutator is None:
             return StateMutationResult(
                 applied=False,
                 message=(
-                    "State mutation provider is not configured; "
+                    "State mutator is not configured; "
                     "only local clear was applied."
                 ),
             )
 
         try:
-            result = self.state_mutation_provider.mutate_state(
+            result = self.state_mutator.mutate_state(
                 mutation=mutation,
                 args=args,
                 current_state=self._current_state,
@@ -1115,10 +1164,34 @@ class DebuggerApp(App):
                         )
 
         elif command == "/state":
-            state_panel = self.query_one("#state-panel", StatePanel)
-            state_panel.update_state(self._current_state)
-            self._update_memory_panel(self._current_state)
+            self._update_state_panel(self._current_state)
+            store_items, store_source, store_error = (
+                self.runner.get_store_snapshot()
+            )
+            self._update_store_panel(
+                StateUpdateEvent(
+                    values=self._current_state,
+                    store_items=store_items,
+                    store_source=store_source,
+                    store_error=store_error,
+                )
+            )
             chat_log.write(Text("State refreshed.", style="green"))
+
+        elif command == "/store":
+            store_items, store_source, store_error = (
+                self.runner.get_store_snapshot()
+            )
+            self._update_store_panel(
+                StateUpdateEvent(
+                    values=self._current_state,
+                    store_items=store_items,
+                    store_source=store_source,
+                    store_error=store_error,
+                )
+            )
+            self._maybe_auto_expand_store(store_items)
+            chat_log.write(Text("Store refreshed.", style="green"))
 
         elif command == "/theme":
             if self.dark:
@@ -1163,7 +1236,7 @@ class DebuggerApp(App):
   /breakpoints          Show all breakpoints
   /clear bp             Clear all breakpoints
   /clear [local]        Clear local chat/panels/snapshot metadata
-  /clear <mutation>     Local clear + optional provider mutation
+  /clear <mutation>     Local clear + optional mutator mutation
 
 [cyan]Debugging (when at breakpoint, pudb-style):[/cyan]
   c                     Continue execution
@@ -1184,6 +1257,7 @@ class DebuggerApp(App):
 
 [cyan]Other:[/cyan]
   /state                Refresh state panel
+  /store                Refresh store panel from backend
   /theme                Toggle light/dark
   /history [n]          Show input history
   /q or /quit           Quit

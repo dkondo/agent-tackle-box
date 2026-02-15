@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import FrameType
-from typing import Any
+from typing import Any, Union
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +75,8 @@ class StateUpdateEvent:
 
     values: dict[str, Any] = field(default_factory=dict)
     store_items: dict[str, dict[str, Any]] = field(default_factory=dict)
+    store_source: str = "none"
+    store_error: str | None = None
     step: int = 0
     next_nodes: list[str] = field(default_factory=list)
 
@@ -128,15 +130,15 @@ class RunFinishedEvent:
 
 
 # Union type for all events
-DebugEvent = (
-    NodeStartEvent
-    | NodeEndEvent
-    | ToolCallEvent
-    | ToolResultEvent
-    | StateUpdateEvent
-    | BreakpointHit
-    | AgentResponseEvent
-    | AgentErrorEvent
-    | StreamTokenEvent
-    | RunFinishedEvent
-)
+DebugEvent = Union[
+    NodeStartEvent,
+    NodeEndEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    StateUpdateEvent,
+    BreakpointHit,
+    AgentResponseEvent,
+    AgentErrorEvent,
+    StreamTokenEvent,
+    RunFinishedEvent,
+]

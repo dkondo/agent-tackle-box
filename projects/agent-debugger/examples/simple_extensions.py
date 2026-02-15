@@ -10,6 +10,9 @@ from adb.extensions import (
     StateMutationResult,
 )
 
+MEMORY_NAMESPACE_PREFIX = "memories/simple_agent/"
+MEMORY_KEY = "session"
+
 
 class SimpleMemoryRenderer:
     """Render simple agent memory in a custom panel format."""
@@ -17,11 +20,20 @@ class SimpleMemoryRenderer:
     def render_memory(
         self, snapshot: Mapping[str, Any]
     ) -> MemoryRenderModel | None:
-        state = snapshot.get("state", {})
-        if not isinstance(state, dict):
+        store_items = snapshot.get("store_items", {})
+        if not isinstance(store_items, dict):
             return None
-        memory = state.get("memory")
-        if not isinstance(memory, dict):
+        memory: Mapping[str, Any] | None = None
+        for namespace, entries in store_items.items():
+            if not isinstance(namespace, str) or not isinstance(entries, dict):
+                continue
+            if not namespace.startswith(MEMORY_NAMESPACE_PREFIX):
+                continue
+            candidate = entries.get(MEMORY_KEY)
+            if isinstance(candidate, dict):
+                memory = candidate
+                break
+        if memory is None:
             return None
 
         lines = [
@@ -68,7 +80,7 @@ class SimpleChatOutputRenderer:
         return ChatRenderModel(lines=lines)
 
 
-class SimpleStateMutationProvider:
+class SimpleStateMutator:
     """Apply simple state mutations through runner.update_graph_state."""
 
     def mutate_state(
@@ -83,14 +95,50 @@ class SimpleStateMutationProvider:
                 applied=False,
                 message=f"Unsupported mutation '{mutation}'.",
             )
+        store = getattr(getattr(runner, "graph", None), "store", None)
+        if store is None:
+            return StateMutationResult(
+                applied=False,
+                message="No backend store is configured.",
+            )
 
-        success, detail = runner.update_graph_state({"memory": {}})
-        if success:
+        deleted = 0
+        try:
+            namespaces = store.list_namespaces(
+                prefix=("memories", "simple_agent"),
+                limit=1000,
+                offset=0,
+            )
+            for raw_namespace in namespaces:
+                if not isinstance(raw_namespace, (tuple, list)):
+                    continue
+                namespace = tuple(str(part) for part in raw_namespace)
+                entries = store.search(
+                    namespace,
+                    limit=1000,
+                    offset=0,
+                    refresh_ttl=False,
+                )
+                for item in entries:
+                    key = getattr(item, "key", None)
+                    if key is None and isinstance(item, dict):
+                        key = item.get("key")
+                    if key is None:
+                        continue
+                    store.delete(namespace, str(key))
+                    deleted += 1
+        except Exception as e:
+            return StateMutationResult(
+                applied=False,
+                message=f"Store clear failed: {e}",
+            )
+
+        if deleted:
             return StateMutationResult(
                 applied=True,
-                message="Persisted graph memory was cleared.",
+                message=f"Cleared {deleted} store item(s).",
             )
         return StateMutationResult(
-            applied=False,
-            message=f"Graph memory clear failed: {detail}",
+            applied=True,
+            message="No simple-agent store items to clear.",
         )

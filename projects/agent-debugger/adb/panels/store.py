@@ -18,6 +18,8 @@ class StorePanel(Static):
         super().__init__(**kwargs)
         self._items: dict[str, dict[str, Any]] = {}
         self._custom_lines: list[str] | None = None
+        self._source: str | None = None
+        self._error: str | None = None
 
     @property
     def items(self) -> dict[str, dict[str, Any]]:
@@ -29,15 +31,31 @@ class StorePanel(Static):
         """Return custom rendered lines when a renderer is active."""
         return self._custom_lines
 
-    def update_store(self, items: dict[str, dict[str, Any]]) -> None:
+    def update_store(
+        self,
+        items: dict[str, dict[str, Any]],
+        *,
+        source: str | None = None,
+        error: str | None = None,
+    ) -> None:
         """Update the store display with namespace -> {key: value} items."""
         self._items = items
         self._custom_lines = None
+        self._source = source
+        self._error = error
         self._refresh_display()
 
-    def update_custom_lines(self, lines: list[str]) -> None:
+    def update_custom_lines(
+        self,
+        lines: list[str],
+        *,
+        source: str | None = None,
+        error: str | None = None,
+    ) -> None:
         """Update panel with pre-rendered lines from a custom renderer."""
         self._custom_lines = lines
+        self._source = source
+        self._error = error
         self._refresh_display()
 
     def _format_value(self, value: Any, max_len: int = 60) -> str:
@@ -57,16 +75,21 @@ class StorePanel(Static):
         """Refresh the store display."""
         lines: list[str] = []
 
+        if self._source:
+            lines.append(f"[dim]source: {self._source}[/dim]")
+        if self._error:
+            lines.append(f"[red]store error: {self._error}[/red]")
+
         if self._custom_lines is not None:
             if not self._custom_lines:
-                lines.append("[dim]No memory yet.[/dim]")
+                lines.append("[dim]No backend store data.[/dim]")
             else:
                 lines.extend(self._custom_lines)
             self.update(Text.from_markup("\n".join(lines)))
             return
 
         if not self._items:
-            lines.append("[dim]No store data.[/dim]")
+            lines.append("[dim]No backend store data.[/dim]")
             self.update(Text.from_markup("\n".join(lines)))
             return
 

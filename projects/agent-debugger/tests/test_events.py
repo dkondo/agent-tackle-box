@@ -67,6 +67,8 @@ class TestEvents:
             next_nodes=["tools"],
         )
         assert event.next_nodes == ["tools"]
+        assert event.store_source == "none"
+        assert event.store_error is None
 
     def test_breakpoint_hit_fills_from_frame(self):
         # Get a real frame

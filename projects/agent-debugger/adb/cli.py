@@ -14,7 +14,9 @@ from adb.breakpoints import BreakpointManager
 from adb.extensions import (
     ChatOutputRenderer,
     MemoryRenderer,
-    StateMutationProvider,
+    StateRenderer,
+    StateMutator,
+    StoreRenderer,
 )
 
 
@@ -114,8 +116,14 @@ def _run_app(
     graph: Any,
     thread_id: str | None = None,
     memory_renderer: MemoryRenderer | None = None,
+    store_renderer: StoreRenderer | None = None,
+    state_renderer: StateRenderer | None = None,
     output_renderer: ChatOutputRenderer | None = None,
-    state_mutation_provider: StateMutationProvider | None = None,
+    state_mutator: StateMutator | None = None,
+    state_mutation_provider: StateMutator | None = None,
+    store_prefix: tuple[str, ...] | None = None,
+    store_max_namespaces: int = 20,
+    store_items_per_namespace: int = 20,
 ) -> None:
     """Initialize and run the debugger app."""
     from adb.app import DebuggerApp
@@ -130,6 +138,9 @@ def _run_app(
         event_queue=event_queue,
         command_queue=command_queue,
         bp_manager=bp_manager,
+        store_namespace_prefix=store_prefix,
+        store_max_namespaces=store_max_namespaces,
+        store_items_per_namespace=store_items_per_namespace,
     )
 
     if thread_id:
@@ -144,10 +155,21 @@ def _run_app(
         runner=runner,
         bp_manager=bp_manager,
         memory_renderer=memory_renderer,
+        store_renderer=store_renderer,
+        state_renderer=state_renderer,
         output_renderer=output_renderer,
-        state_mutation_provider=state_mutation_provider,
+        state_mutator=state_mutator or state_mutation_provider,
     )
     app.run()
+
+
+def _parse_store_prefix(raw: str | None) -> tuple[str, ...] | None:
+    """Parse comma-delimited store namespace prefix."""
+    if not raw:
+        return None
+    parts = [part.strip() for part in raw.split(",")]
+    filtered = tuple(part for part in parts if part)
+    return filtered or None
 
 
 @click.group()
@@ -171,21 +193,57 @@ def main() -> None:
     help="Optional memory renderer (module:Class).",
 )
 @click.option(
+    "--store-renderer",
+    default=None,
+    help="Optional store renderer (module:Class).",
+)
+@click.option(
+    "--state-renderer",
+    default=None,
+    help="Optional state renderer (module:Class).",
+)
+@click.option(
     "--output-renderer",
     default=None,
     help="Optional chat output renderer (module:Class).",
 )
 @click.option(
+    "--state-mutator",
     "--state-mutation-provider",
+    "state_mutator",
     default=None,
-    help="Optional state mutation provider (module:Class).",
+    help="Optional state mutator (module:Class).",
+)
+@click.option(
+    "--store-prefix",
+    default=None,
+    help="Optional backend store namespace prefix (comma-separated).",
+)
+@click.option(
+    "--store-max-namespaces",
+    default=20,
+    type=int,
+    show_default=True,
+    help="Maximum number of store namespaces to show.",
+)
+@click.option(
+    "--store-items-per-namespace",
+    default=20,
+    type=int,
+    show_default=True,
+    help="Maximum number of items per namespace to show.",
 )
 def attach(
     graph_ref: str,
     thread_id: str | None,
     memory_renderer: str | None,
+    store_renderer: str | None,
+    state_renderer: str | None,
     output_renderer: str | None,
-    state_mutation_provider: str | None,
+    state_mutator: str | None,
+    store_prefix: str | None,
+    store_max_namespaces: int,
+    store_items_per_namespace: int,
 ) -> None:
     """Attach to a LangGraph graph object.
 
@@ -197,22 +255,37 @@ def attach(
         kind="memory renderer",
         required_methods=("render_memory",),
     )
+    loaded_store_renderer = _load_optional_extension(
+        store_renderer,
+        kind="store renderer",
+        required_methods=("render_store",),
+    )
+    loaded_state_renderer = _load_optional_extension(
+        state_renderer,
+        kind="state renderer",
+        required_methods=("render_state",),
+    )
     loaded_output_renderer = _load_optional_extension(
         output_renderer,
         kind="output renderer",
         required_methods=("can_render", "render_chat_output"),
     )
-    loaded_state_mutation_provider = _load_optional_extension(
-        state_mutation_provider,
-        kind="state mutation provider",
+    loaded_state_mutator = _load_optional_extension(
+        state_mutator,
+        kind="state mutator",
         required_methods=("mutate_state",),
     )
     _run_app(
         graph,
         thread_id=thread_id,
         memory_renderer=loaded_memory_renderer,
+        store_renderer=loaded_store_renderer,
+        state_renderer=loaded_state_renderer,
         output_renderer=loaded_output_renderer,
-        state_mutation_provider=loaded_state_mutation_provider,
+        state_mutator=loaded_state_mutator,
+        store_prefix=_parse_store_prefix(store_prefix),
+        store_max_namespaces=max(1, store_max_namespaces),
+        store_items_per_namespace=max(1, store_items_per_namespace),
     )
 
 
@@ -237,22 +310,58 @@ def attach(
     help="Optional memory renderer (module:Class).",
 )
 @click.option(
+    "--store-renderer",
+    default=None,
+    help="Optional store renderer (module:Class).",
+)
+@click.option(
+    "--state-renderer",
+    default=None,
+    help="Optional state renderer (module:Class).",
+)
+@click.option(
     "--output-renderer",
     default=None,
     help="Optional chat output renderer (module:Class).",
 )
 @click.option(
+    "--state-mutator",
     "--state-mutation-provider",
+    "state_mutator",
     default=None,
-    help="Optional state mutation provider (module:Class).",
+    help="Optional state mutator (module:Class).",
+)
+@click.option(
+    "--store-prefix",
+    default=None,
+    help="Optional backend store namespace prefix (comma-separated).",
+)
+@click.option(
+    "--store-max-namespaces",
+    default=20,
+    type=int,
+    show_default=True,
+    help="Maximum number of store namespaces to show.",
+)
+@click.option(
+    "--store-items-per-namespace",
+    default=20,
+    type=int,
+    show_default=True,
+    help="Maximum number of items per namespace to show.",
 )
 def run(
     script: str,
     graph_attr: str | None,
     thread_id: str | None,
     memory_renderer: str | None,
+    store_renderer: str | None,
+    state_renderer: str | None,
     output_renderer: str | None,
-    state_mutation_provider: str | None,
+    state_mutator: str | None,
+    store_prefix: str | None,
+    store_max_namespaces: int,
+    store_items_per_namespace: int,
 ) -> None:
     """Run a script and debug its LangGraph graph.
 
@@ -300,22 +409,37 @@ def run(
         kind="memory renderer",
         required_methods=("render_memory",),
     )
+    loaded_store_renderer = _load_optional_extension(
+        store_renderer,
+        kind="store renderer",
+        required_methods=("render_store",),
+    )
+    loaded_state_renderer = _load_optional_extension(
+        state_renderer,
+        kind="state renderer",
+        required_methods=("render_state",),
+    )
     loaded_output_renderer = _load_optional_extension(
         output_renderer,
         kind="output renderer",
         required_methods=("can_render", "render_chat_output"),
     )
-    loaded_state_mutation_provider = _load_optional_extension(
-        state_mutation_provider,
-        kind="state mutation provider",
+    loaded_state_mutator = _load_optional_extension(
+        state_mutator,
+        kind="state mutator",
         required_methods=("mutate_state",),
     )
     _run_app(
         graph,
         thread_id=thread_id,
         memory_renderer=loaded_memory_renderer,
+        store_renderer=loaded_store_renderer,
+        state_renderer=loaded_state_renderer,
         output_renderer=loaded_output_renderer,
-        state_mutation_provider=loaded_state_mutation_provider,
+        state_mutator=loaded_state_mutator,
+        store_prefix=_parse_store_prefix(store_prefix),
+        store_max_namespaces=max(1, store_max_namespaces),
+        store_items_per_namespace=max(1, store_items_per_namespace),
     )
 
 

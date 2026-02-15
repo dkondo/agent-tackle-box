@@ -21,8 +21,15 @@ class ChatRenderModel:
 
 
 @dataclass
+class StateRenderModel:
+    """Structured output for state panel rendering."""
+
+    lines: list[str] = field(default_factory=list)
+
+
+@dataclass
 class StateMutationResult:
-    """Outcome returned by a state mutation provider."""
+    """Outcome returned by a state mutator."""
 
     applied: bool = False
     message: str | None = None
@@ -35,6 +42,24 @@ class MemoryRenderer(Protocol):
         self, snapshot: Mapping[str, Any]
     ) -> MemoryRenderModel | None:
         """Render memory/store content from a generic snapshot."""
+
+
+class StoreRenderer(Protocol):
+    """Optional renderer for backend store display."""
+
+    def render_store(
+        self, snapshot: Mapping[str, Any]
+    ) -> MemoryRenderModel | None:
+        """Render backend store content from a generic snapshot."""
+
+
+class StateRenderer(Protocol):
+    """Optional renderer for state panel display."""
+
+    def render_state(
+        self, snapshot: Mapping[str, Any]
+    ) -> StateRenderModel | None:
+        """Render state content from a generic snapshot."""
 
 
 class ChatOutputRenderer(Protocol):
@@ -52,8 +77,8 @@ class ChatOutputRenderer(Protocol):
         """Render chat blocks for a response payload."""
 
 
-class StateMutationProvider(Protocol):
-    """Optional provider for generic state mutation commands."""
+class StateMutator(Protocol):
+    """Optional mutator for generic state mutation commands."""
 
     def mutate_state(
         self,
@@ -63,3 +88,7 @@ class StateMutationProvider(Protocol):
         runner: Any,
     ) -> StateMutationResult | None:
         """Apply a named mutation against the graph state."""
+
+
+# Backward-compatibility alias.
+StateMutationProvider = StateMutator
