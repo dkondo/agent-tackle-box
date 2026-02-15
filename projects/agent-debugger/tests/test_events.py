@@ -3,7 +3,7 @@
 import sys
 from types import FrameType
 
-from adb.events import (
+from agent_debugger.events import (
     AgentErrorEvent,
     AgentResponseEvent,
     BreakpointHit,

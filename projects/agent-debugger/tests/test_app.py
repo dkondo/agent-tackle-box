@@ -9,23 +9,23 @@ from queue import Empty, Queue
 
 import pytest
 
-from adb.app import DebuggerApp
-from adb.breakpoints import BreakpointManager, BreakpointType
-from adb.events import (
+from agent_debugger.app import DebuggerApp
+from agent_debugger.breakpoints import BreakpointManager, BreakpointType
+from agent_debugger.events import (
     AgentResponseEvent,
     BreakpointHit,
     DebugCommand,
     RunFinishedEvent,
     StateUpdateEvent,
 )
-from adb.extensions import (
+from agent_debugger.extensions import (
     ChatRenderModel,
     MemoryRenderModel,
     StateRenderModel,
     StateMutationResult,
 )
-from adb.runner import AgentRunner
-from adb.tracer import AgentTracer
+from agent_debugger.runner import AgentRunner
+from agent_debugger.tracer import AgentTracer
 
 
 def _make_graph():
@@ -674,7 +674,7 @@ def test_tracer_line_breakpoint_and_continue():
 def test_tracer_nested_chain_start_end_attribution():
     """Test nested chain callbacks emit correctly attributed end events."""
     from examples.simple_agent import graph
-    from adb.events import NodeEndEvent, NodeStartEvent
+    from agent_debugger.events import NodeEndEvent, NodeStartEvent
 
     eq = Queue()
     cq = Queue()
@@ -754,7 +754,7 @@ def test_runner_tool_call_and_result_ids_match():
     from langgraph.graph.message import add_messages
     from langgraph.prebuilt import ToolNode, tools_condition
 
-    from adb.events import RunFinishedEvent, ToolCallEvent, ToolResultEvent
+    from agent_debugger.events import RunFinishedEvent, ToolCallEvent, ToolResultEvent
 
     @tool
     def add(a: int, b: int) -> int:
@@ -824,7 +824,7 @@ def test_runner_tool_call_and_result_ids_match():
 
 def test_runner_emits_response_payload_for_simple_agent_memory():
     """Runner should emit AI response payload for the simple agent."""
-    from adb.events import RunFinishedEvent
+    from agent_debugger.events import RunFinishedEvent
     from examples.simple_agent import graph
 
     eq = Queue()
@@ -871,7 +871,7 @@ def test_runner_update_graph_state_without_checkpointer_returns_error():
 
 def test_runner_emits_state_update_for_simple_agent_values_mode():
     """Runner should emit state updates for non-checkpoint graphs."""
-    from adb.events import RunFinishedEvent
+    from agent_debugger.events import RunFinishedEvent
     from examples.simple_agent import graph
 
     eq = Queue()

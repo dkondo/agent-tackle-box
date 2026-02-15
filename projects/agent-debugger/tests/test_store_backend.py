@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from adb.store_backend import snapshot_backend_store
+from agent_debugger.store_backend import snapshot_backend_store
 
 
 def test_snapshot_backend_store_returns_none_source_without_store():

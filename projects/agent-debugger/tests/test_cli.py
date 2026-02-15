@@ -8,7 +8,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from adb import cli
+from agent_debugger import cli
 
 
 class DummyMemoryRenderer:

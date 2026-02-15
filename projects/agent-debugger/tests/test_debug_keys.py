@@ -7,11 +7,11 @@ from queue import Queue
 
 import pytest
 
-from adb.app import DebuggerApp
-from adb.breakpoints import BreakpointManager
-from adb.events import BreakpointHit, DebugCommand
-from adb.runner import AgentRunner
-from adb.tracer import AgentTracer
+from agent_debugger.app import DebuggerApp
+from agent_debugger.breakpoints import BreakpointManager
+from agent_debugger.events import BreakpointHit, DebugCommand
+from agent_debugger.runner import AgentRunner
+from agent_debugger.tracer import AgentTracer
 
 
 def _make_graph():

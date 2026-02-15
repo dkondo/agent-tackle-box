@@ -33,7 +33,7 @@ uv sync --dev
 uv run adb run examples/simple_agent.py
 
 # Equivalent module invocation
-uv run python -m adb.cli run examples/simple_agent.py
+uv run python -m agent_debugger.cli run examples/simple_agent.py
 ```
 
 ## Features
@@ -42,7 +42,7 @@ uv run python -m adb.cli run examples/simple_agent.py
 - **Code-level debugging**: Set breakpoints, step through code, inspect variables
 - **Agent-level breakpoints**: Break on node start, tool call, or state change
 - **Optional renderers/providers**: Custom state, store, memory, chat output, and state mutation hooks
-- **`import adb; adb.set_trace()`**: Drop into the debugger from anywhere in your agent code
+- **`import agent_debugger as adb; adb.set_trace()`**: Drop into the debugger from anywhere in your agent code
 
 ## Usage
 

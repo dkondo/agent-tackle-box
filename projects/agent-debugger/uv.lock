@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.11"
 
 [[package]]
-name = "adb"
+name = "agent-debugger"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

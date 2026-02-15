@@ -1,5 +1,5 @@
 [project]
-name = "adb"
+name = "agent-debugger"
 version = "0.1.0"
 description = "Agent Debugger for LangChain/LangGraph"
 readme = "README.md"
@@ -20,14 +20,14 @@ dev = [
 ]
 
 [project.scripts]
-adb = "adb.cli:main"
+adb = "agent_debugger.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["adb"]
+packages = ["agent_debugger"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,6 +1,6 @@
 """Tests for the breakpoint manager."""
 
-from adb.breakpoints import BreakpointManager, BreakpointType
+from agent_debugger.breakpoints import BreakpointManager, BreakpointType
 
 
 class TestBreakpointManager:
