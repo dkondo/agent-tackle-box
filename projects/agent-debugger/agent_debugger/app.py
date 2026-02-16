@@ -65,13 +65,47 @@ HISTORY_PATH = HISTORY_DIR / "history.json"
 
 
 class ChatLog(RichLog):
-    """Main chat pane."""
+    """Main chat pane with auto-wrapping text."""
+
+    DEFAULT_CSS = """
+    ChatLog {
+        overflow-x: hidden;
+    }
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize chat pane with responsive line-wrapping."""
         kwargs.setdefault("wrap", True)
         kwargs.setdefault("min_width", 1)
         super().__init__(**kwargs)
+
+    def write(
+        self,
+        content: Any,
+        width: int | None = None,
+        expand: bool = False,
+        shrink: bool = True,
+        scroll_end: bool | None = None,
+        animate: bool = False,
+    ) -> "ChatLog":
+        """Write content, forcing wrap to container width.
+
+        When ``wrap`` is enabled and no explicit width is given, this
+        renders content at the current container width so long lines
+        wrap instead of extending the virtual canvas.
+        """
+        if self.wrap and width is None and self._size_known:
+            content_width = self.scrollable_content_region.width
+            if content_width > 0:
+                width = content_width
+        return super().write(
+            content,
+            width=width,
+            expand=expand,
+            shrink=shrink,
+            scroll_end=scroll_end,
+            animate=animate,
+        )
 
 
 class DebuggerApp(App):
