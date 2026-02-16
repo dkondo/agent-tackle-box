@@ -6,7 +6,7 @@ A TUI debugger that combines application-level agent inspection (state, memory, 
 
 ```bash
 # Install
-uv pip install -e .
+uv add agent-debugger
 
 # Debug a LangGraph agent script
 adb run my_agent.py
@@ -88,6 +88,31 @@ USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/s
 ```
 
 See `/help` in the TUI for all commands.
+
+## Programmatic Breakpoints
+
+You can drop into the adb debugger from anywhere in your agent code using Python's built-in `breakpoint()`:
+
+```bash
+PYTHONBREAKPOINT="adb.set_trace" adb run my_agent.py
+```
+
+Then add `breakpoint()` calls in your code:
+
+```python
+def my_node(state: dict) -> dict:
+    messages = state.get("messages", [])
+    breakpoint()  # execution pauses here in the adb UI
+    return {"messages": [...]}
+```
+
+Or call `adb.set_trace()` directly:
+
+```python
+def my_node(state: dict) -> dict:
+    import agent_debugger as adb; adb.set_trace()
+    return {"messages": [...]}
+```
 
 ## Debug Keys
 
