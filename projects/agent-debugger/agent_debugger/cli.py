@@ -13,7 +13,6 @@ import click
 from agent_debugger.breakpoints import BreakpointManager
 from agent_debugger.extensions import (
     ChatOutputRenderer,
-    MemoryRenderer,
     StateMutator,
     StateRenderer,
     StoreRenderer,
@@ -103,7 +102,6 @@ def _load_optional_extension(
 def _run_app(
     graph: Any,
     thread_id: str | None = None,
-    memory_renderer: MemoryRenderer | None = None,
     store_renderer: StoreRenderer | None = None,
     state_renderer: StateRenderer | None = None,
     output_renderer: ChatOutputRenderer | None = None,
@@ -143,7 +141,6 @@ def _run_app(
     app = DebuggerApp(
         runner=runner,
         bp_manager=bp_manager,
-        memory_renderer=memory_renderer,
         store_renderer=store_renderer,
         state_renderer=state_renderer,
         output_renderer=output_renderer,
@@ -176,11 +173,6 @@ def main() -> None:
     "-t",
     default=None,
     help="Thread ID for checkpointed graphs.",
-)
-@click.option(
-    "--memory-renderer",
-    default=None,
-    help="Optional memory renderer (module:Class).",
 )
 @click.option(
     "--store-renderer",
@@ -231,7 +223,6 @@ def main() -> None:
 def attach(
     graph_ref: str,
     thread_id: str | None,
-    memory_renderer: str | None,
     store_renderer: str | None,
     state_renderer: str | None,
     output_renderer: str | None,
@@ -246,11 +237,6 @@ def attach(
     GRAPH_REF is a module:attribute reference, e.g. 'my_agent:graph'.
     """
     graph = _load_graph(graph_ref)
-    loaded_memory_renderer = _load_optional_extension(
-        memory_renderer,
-        kind="memory renderer",
-        required_methods=("render_memory",),
-    )
     loaded_store_renderer = _load_optional_extension(
         store_renderer,
         kind="store renderer",
@@ -279,7 +265,6 @@ def attach(
     _run_app(
         graph,
         thread_id=thread_id,
-        memory_renderer=loaded_memory_renderer,
         store_renderer=loaded_store_renderer,
         state_renderer=loaded_state_renderer,
         output_renderer=loaded_output_renderer,
@@ -305,11 +290,6 @@ def attach(
     "-t",
     default=None,
     help="Thread ID for checkpointed graphs.",
-)
-@click.option(
-    "--memory-renderer",
-    default=None,
-    help="Optional memory renderer (module:Class).",
 )
 @click.option(
     "--store-renderer",
@@ -361,7 +341,6 @@ def run(
     script: str,
     graph_attr: str | None,
     thread_id: str | None,
-    memory_renderer: str | None,
     store_renderer: str | None,
     state_renderer: str | None,
     output_renderer: str | None,
@@ -409,11 +388,6 @@ def run(
             "No CompiledStateGraph found in script. Use --graph to specify the attribute name."
         )
 
-    loaded_memory_renderer = _load_optional_extension(
-        memory_renderer,
-        kind="memory renderer",
-        required_methods=("render_memory",),
-    )
     loaded_store_renderer = _load_optional_extension(
         store_renderer,
         kind="store renderer",
@@ -442,7 +416,6 @@ def run(
     _run_app(
         graph,
         thread_id=thread_id,
-        memory_renderer=loaded_memory_renderer,
         store_renderer=loaded_store_renderer,
         state_renderer=loaded_state_renderer,
         output_renderer=loaded_output_renderer,

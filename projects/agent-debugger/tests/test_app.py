@@ -61,7 +61,6 @@ def _simple_agent_break_line() -> int:
 
 
 def _make_app(
-    memory_renderer=None,
     store_renderer=None,
     state_renderer=None,
     output_renderer=None,
@@ -77,7 +76,6 @@ def _make_app(
     return DebuggerApp(
         runner=runner,
         bp_manager=bp,
-        memory_renderer=memory_renderer,
         store_renderer=store_renderer,
         state_renderer=state_renderer,
         output_renderer=output_renderer,
@@ -354,29 +352,6 @@ async def test_tab_navigation_slash_commands():
 
 
 @pytest.mark.asyncio
-async def test_memory_renderer_is_used_for_backend_store_snapshots():
-    """Legacy memory renderer should only customize backend store snapshots."""
-
-    class _MemoryRenderer:
-        def render_memory(self, snapshot):
-            return MemoryRenderModel(lines=["[bold]custom memory[/bold]"])
-
-    app = _make_app(memory_renderer=_MemoryRenderer())
-    async with app.run_test(size=(120, 40)) as pilot:
-        app._handle_event(
-            StateUpdateEvent(
-                values={"memory": {"k": "v"}},
-                store_items={"memories/u1": {"k": "v"}},
-                store_source="backend",
-                step=1,
-            )
-        )
-        await pilot.pause()
-        store_panel = app.query_one("#store-panel")
-        assert store_panel.custom_lines == ["[bold]custom memory[/bold]"]
-
-
-@pytest.mark.asyncio
 async def test_store_auto_expands_when_memory_first_appears():
     """Store panel should auto-expand on first non-empty backend store snapshot."""
     app = _make_app()
@@ -435,14 +410,14 @@ async def test_store_stays_visible_across_breakpoint_step_hits():
 
 
 @pytest.mark.asyncio
-async def test_memory_renderer_failure_falls_back_to_generic_store():
+async def test_store_renderer_failure_falls_back_to_generic_store():
     """Renderer errors should fall back to generic backend store panel."""
 
-    class _BrokenMemoryRenderer:
-        def render_memory(self, snapshot):
+    class _BrokenStoreRenderer:
+        def render_store(self, snapshot):
             raise RuntimeError("boom")
 
-    app = _make_app(memory_renderer=_BrokenMemoryRenderer())
+    app = _make_app(store_renderer=_BrokenStoreRenderer())
     async with app.run_test(size=(120, 40)) as pilot:
         app._handle_event(
             StateUpdateEvent(
@@ -456,23 +431,6 @@ async def test_memory_renderer_failure_falls_back_to_generic_store():
         store_panel = app.query_one("#store-panel")
         assert store_panel.custom_lines is None
         assert store_panel.items == {"memories/u1": {"k": "v"}}
-
-
-@pytest.mark.asyncio
-async def test_memory_renderer_is_ignored_without_backend_store_snapshot():
-    """No backend store should not fall back to state-derived memory."""
-
-    class _MemoryRenderer:
-        def render_memory(self, snapshot):
-            return MemoryRenderModel(lines=["[bold]custom memory[/bold]"])
-
-    app = _make_app(memory_renderer=_MemoryRenderer())
-    async with app.run_test(size=(120, 40)) as pilot:
-        app._handle_event(StateUpdateEvent(values={"memory": {"k": "v"}}, step=1))
-        await pilot.pause()
-        store_panel = app.query_one("#store-panel")
-        assert store_panel.custom_lines is None
-        assert store_panel.items == {}
 
 
 @pytest.mark.asyncio

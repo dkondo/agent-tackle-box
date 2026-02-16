@@ -65,7 +65,7 @@ Deduplication: The runner tracks seen tool calls, tool results, and agent respon
 
 ## Extension and Customization Model
 The debugger is intentionally generic, but supports optional protocols in `agent_debugger/extensions.py`:
-- `StoreRenderer` and `MemoryRenderer` for Store panel rendering.
+- `StoreRenderer` for Store panel rendering.
 - `StateRenderer` for State panel rendering.
 - `ToolRenderer` for Tools panel rendering.
 - `ChatOutputRenderer` for response formatting in chat.

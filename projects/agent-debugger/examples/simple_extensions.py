@@ -16,10 +16,10 @@ MEMORY_NAMESPACE_PREFIX = "memories/simple_agent/"
 MEMORY_KEY = "session"
 
 
-class SimpleMemoryRenderer:
-    """Render simple agent memory in a custom panel format."""
+class SimpleStoreRenderer:
+    """Render simple agent store data in a custom panel format."""
 
-    def render_memory(self, snapshot: Mapping[str, Any]) -> MemoryRenderModel | None:
+    def render_store(self, snapshot: Mapping[str, Any]) -> MemoryRenderModel | None:
         store_items = snapshot.get("store_items", {})
         if not isinstance(store_items, dict):
             return None

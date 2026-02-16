@@ -43,13 +43,6 @@ class StateMutationResult:
     message: str | None = None
 
 
-class MemoryRenderer(Protocol):
-    """Optional renderer for custom memory display."""
-
-    def render_memory(self, snapshot: Mapping[str, Any]) -> MemoryRenderModel | None:
-        """Render memory/store content from a generic snapshot."""
-
-
 class StoreRenderer(Protocol):
     """Optional renderer for backend store display."""
 

@@ -11,11 +11,6 @@ from click.testing import CliRunner
 from agent_debugger import cli
 
 
-class DummyMemoryRenderer:
-    def render_memory(self, snapshot):
-        return None
-
-
 class DummyOutputRenderer:
     def can_render(self, payload):
         return False
@@ -199,8 +194,6 @@ def test_attach_loads_optional_extensions(monkeypatch):
         [
             "attach",
             "dummy.module:graph",
-            "--memory-renderer",
-            "tests.test_cli:DummyMemoryRenderer",
             "--output-renderer",
             "tests.test_cli:DummyOutputRenderer",
             "--store-renderer",
@@ -215,7 +208,6 @@ def test_attach_loads_optional_extensions(monkeypatch):
     )
 
     assert result.exit_code == 0, result.output
-    assert isinstance(captured["memory_renderer"], DummyMemoryRenderer)
     assert isinstance(captured["store_renderer"], DummyStoreRenderer)
     assert isinstance(captured["state_renderer"], DummyStateRenderer)
     assert isinstance(captured["output_renderer"], DummyOutputRenderer)
@@ -242,14 +234,14 @@ def test_attach_extension_load_failure_warns_and_falls_back(monkeypatch):
         [
             "attach",
             "dummy.module:graph",
-            "--memory-renderer",
+            "--store-renderer",
             "badref",
         ],
     )
 
     assert result.exit_code == 0, result.output
-    assert "Warning: failed to load memory renderer 'badref'" in result.output
-    assert captured["memory_renderer"] is None
+    assert "Warning: failed to load store renderer 'badref'" in result.output
+    assert captured["store_renderer"] is None
 
 
 def test_attach_supports_legacy_state_mutation_provider_flag(monkeypatch):

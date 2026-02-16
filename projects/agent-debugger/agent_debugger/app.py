@@ -40,7 +40,6 @@ from agent_debugger.events import (
 )
 from agent_debugger.extensions import (
     ChatOutputRenderer,
-    MemoryRenderer,
     StateMutationResult,
     StateMutator,
     StateRenderer,
@@ -176,7 +175,6 @@ class DebuggerApp(App):
         self,
         runner: AgentRunner,
         bp_manager: BreakpointManager,
-        memory_renderer: MemoryRenderer | None = None,
         store_renderer: StoreRenderer | None = None,
         state_renderer: StateRenderer | None = None,
         output_renderer: ChatOutputRenderer | None = None,
@@ -188,7 +186,6 @@ class DebuggerApp(App):
         super().__init__(**kwargs)
         self.runner = runner
         self.bp_manager = bp_manager
-        self.memory_renderer = memory_renderer
         self.store_renderer = store_renderer
         self.state_renderer = state_renderer
         self.output_renderer = output_renderer
@@ -724,10 +721,6 @@ class DebuggerApp(App):
     def _update_store_panel(self, event: StateUpdateEvent) -> None:
         """Update the backend store panel via optional renderers."""
         panel = self.query_one("#store-panel", StorePanel)
-        has_backend_snapshot = event.store_source in {
-            "backend",
-            "backend-legacy",
-        }
         snapshot = {
             "state": event.values,
             "store_items": event.store_items,
@@ -740,23 +733,6 @@ class DebuggerApp(App):
                 model = self.store_renderer.render_store(snapshot)
             except Exception as e:
                 self._log(f"Store renderer failed: {e}", "warning")
-            else:
-                lines = self._normalize_lines(model)
-                if lines is not None:
-                    panel.update_custom_lines(
-                        lines,
-                        source=event.store_source,
-                        error=event.store_error,
-                    )
-                    return
-
-        # Backward-compatible hook: allow existing memory renderers to
-        # customize the Store panel for backend snapshots only.
-        if has_backend_snapshot and self.memory_renderer is not None:
-            try:
-                model = self.memory_renderer.render_memory(snapshot)
-            except Exception as e:
-                self._log(f"Memory renderer failed: {e}", "warning")
             else:
                 lines = self._normalize_lines(model)
                 if lines is not None:
