@@ -511,7 +511,7 @@ async def test_state_renderer_is_used_for_state_updates():
         app._handle_event(StateUpdateEvent(values={"foo": "bar"}, step=1))
         await pilot.pause()
         state_panel = app.query_one("#state-panel")
-        rendered = state_panel.renderable
+        rendered = state_panel.render()
         assert rendered is not None
         assert "custom state" in rendered.plain
 
@@ -767,8 +767,9 @@ def test_tracer_line_breakpoint_and_continue():
     assert not t.is_alive(), "Graph should have finished after continue"
 
 
-def test_tracer_nested_chain_start_end_attribution():
+def test_tracer_nested_chain_start_end_attribution(monkeypatch):
     """Test nested chain callbacks emit correctly attributed end events."""
+    monkeypatch.delenv("USE_LITELLM", raising=False)
     from agent_debugger.events import NodeEndEvent, NodeStartEvent
     from examples.simple_agent import graph
 
@@ -918,8 +919,9 @@ def test_runner_tool_call_and_result_ids_match():
     assert "call_123" in result_ids
 
 
-def test_runner_emits_response_payload_for_simple_agent_memory():
+def test_runner_emits_response_payload_for_simple_agent_memory(monkeypatch):
     """Runner should emit AI response payload for the simple agent."""
+    monkeypatch.delenv("USE_LITELLM", raising=False)
     from agent_debugger.events import RunFinishedEvent
     from examples.simple_agent import graph
 
@@ -1045,7 +1047,7 @@ def test_runner_emits_backend_store_items_when_store_available():
 
 def test_runner_reports_store_none_when_no_backend_store():
     """Runner should explicitly report missing backend store."""
-    from examples.simple_agent import graph
+    graph = _make_graph()
 
     eq = Queue()
     runner = AgentRunner(
@@ -1205,6 +1207,9 @@ async def test_messages_panel_renders_assistant_role_content():
                 step=1,
             )
         )
+        # Switch to the messages tab so the panel renders its lines.
+        tabs = app.query_one("#bottom-tabs")
+        tabs.active = "messages-tab"
         await pilot.pause()
 
         panel = app.query_one("#messages-panel")

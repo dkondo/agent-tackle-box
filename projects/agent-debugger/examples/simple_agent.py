@@ -275,33 +275,41 @@ def _deterministic_reply(messages: list[Any]) -> AIMessage:
     # Time-based greetings
     for tod in ("morning", "afternoon", "evening"):
         if tod in lowered:
-            lang = "spanish" if "spanish" in lowered else (
-                "french" if "french" in lowered else "english"
+            lang = (
+                "spanish"
+                if "spanish" in lowered
+                else ("french" if "french" in lowered else "english")
             )
             return AIMessage(
                 content="",
-                tool_calls=[{
-                    "name": "time_based_greeting",
-                    "args": {"time_of_day": tod, "language": lang},
-                    "id": call_id,
-                    "type": "tool_call",
-                }],
+                tool_calls=[
+                    {
+                        "name": "time_based_greeting",
+                        "args": {"time_of_day": tod, "language": lang},
+                        "id": call_id,
+                        "type": "tool_call",
+                    }
+                ],
             )
 
     # Style-based greetings
     style = (
-        "formal" if "formal" in lowered
-        else "enthusiastic" if "enthusiastic" in lowered
+        "formal"
+        if "formal" in lowered
+        else "enthusiastic"
+        if "enthusiastic" in lowered
         else "friendly"
     )
     return AIMessage(
         content="",
-        tool_calls=[{
-            "name": "generate_greeting",
-            "args": {"name": "friend", "style": style},
-            "id": call_id,
-            "type": "tool_call",
-        }],
+        tool_calls=[
+            {
+                "name": "generate_greeting",
+                "args": {"name": "friend", "style": style},
+                "id": call_id,
+                "type": "tool_call",
+            }
+        ],
     )
 
 
