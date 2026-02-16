@@ -19,6 +19,9 @@ dependencies = [
     "rich>=13.0",
     "deepdiff>=8.0",
     "click>=8.0",
+    "dotenv>=0.9.9",
+    "google-cloud-aiplatform>=1.137.0",
+    "litellm>=1.81.12",
 ]
 keywords = ["langchain", "langgraph", "debugger", "agent", "llm"]
 classifiers = [

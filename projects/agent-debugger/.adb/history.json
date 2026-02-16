@@ -5,5 +5,18 @@
   "/source",
   "/messages",
   "hello",
-  "/clear memory"
+  "/clear memory",
+  "/help",
+  "/break node greeter",
+  "hello",
+  "/break node greeter",
+  "hi",
+  "/break node greeter",
+  "hi",
+  "/break node greeter",
+  "hi",
+  "/clear",
+  "/break node greeter",
+  "hi",
+  "/clear"
 ]
