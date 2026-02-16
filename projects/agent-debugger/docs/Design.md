@@ -54,6 +54,15 @@ Behavior highlights:
 - On continue: re-enables input, collapses debug panels, resumes spinner.
 - Maintains per-turn tool history and command history (`.adb/history.json`).
 
+## Event Streaming
+The worker and UI threads communicate through a typed event pipeline:
+
+**Worker thread** (`runner.py`): `AgentRunner._run_in_thread` calls `graph.stream()` with `stream_mode=["debug", "values", "updates"]`. Each chunk is processed by `_process_stream_chunk`, which converts LangGraph stream data into typed event dataclasses (`NodeStartEvent`, `ToolCallEvent`, `StateUpdateEvent`, etc.) and puts them on `self.event_queue`.
+
+**Main thread** (`app.py`): `DebuggerApp` polls the queue on a 50ms timer via `_poll_events`, which calls `event_queue.get_nowait()` in a loop and dispatches each event to `_handle_event`. That method pattern-matches on the event type and updates the appropriate UI panel — `StatePanel`, `ToolCallsPanel`, `MessagesPanel`, `ChatLog`, etc.
+
+Deduplication: The runner tracks seen tool calls, tool results, and agent responses across invocations (`_seen_tool_calls`, `_seen_tool_results`, `_seen_responses`) to prevent re-emitting historical events when the `updates` stream replays message lists.
+
 ## Extension and Customization Model
 The debugger is intentionally generic, but supports optional protocols in `agent_debugger/extensions.py`:
 - `StoreRenderer` and `MemoryRenderer` for Store panel rendering.
@@ -70,14 +79,6 @@ Store data is backend-first and separate from graph state:
 - Store panel never infers backend data from state when no backend snapshot exists.
 - `StateUpdateEvent` carries both state and store metadata (`store_items`, `store_source`, `store_error`).
 
-## Event Streaming
-The worker and UI threads communicate through a typed event pipeline:
-
-**Worker thread** (`runner.py`): `AgentRunner._run_in_thread` calls `graph.stream()` with `stream_mode=["debug", "values", "updates"]`. Each chunk is processed by `_process_stream_chunk`, which converts LangGraph stream data into typed event dataclasses (`NodeStartEvent`, `ToolCallEvent`, `StateUpdateEvent`, etc.) and puts them on `self.event_queue`.
-
-**Main thread** (`app.py`): `DebuggerApp` polls the queue on a 50ms timer via `_poll_events`, which calls `event_queue.get_nowait()` in a loop and dispatches each event to `_handle_event`. That method pattern-matches on the event type and updates the appropriate UI panel — `StatePanel`, `ToolCallsPanel`, `MessagesPanel`, `ChatLog`, etc.
-
-Deduplication: The runner tracks seen tool calls, tool results, and agent responses across invocations (`_seen_tool_calls`, `_seen_tool_results`, `_seen_responses`) to prevent re-emitting historical events when the `updates` stream replays message lists.
 
 ## End-to-End Flow
 1. User enters text in the TUI.
