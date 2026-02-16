@@ -67,7 +67,11 @@ HISTORY_PATH = HISTORY_DIR / "history.json"
 class ChatLog(RichLog):
     """Main chat pane."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize chat pane with responsive line-wrapping."""
+        kwargs.setdefault("wrap", True)
+        kwargs.setdefault("min_width", 1)
+        super().__init__(**kwargs)
 
 
 class DebuggerApp(App):

@@ -8,6 +8,7 @@ from pathlib import Path
 from queue import Empty, Queue
 
 import pytest
+from rich.text import Text
 
 from agent_debugger.app import DebuggerApp
 from agent_debugger.breakpoints import BreakpointManager, BreakpointType
@@ -95,6 +96,22 @@ async def test_app_composes():
         assert app.query_one("#source-panel") is not None
         assert app.query_one("#vars-panel") is not None
         assert app.query_one("#stack-panel") is not None
+
+
+@pytest.mark.asyncio
+async def test_chat_log_wraps_text_in_narrow_pane():
+    """Main chat pane should wrap long text to the pane width."""
+    app = _make_app()
+    async with app.run_test(size=(60, 20)) as pilot:
+        chat_log = app.query_one("#chat-log")
+        chat_log.clear()
+
+        chat_log.write(Text("x" * 70, style="cyan"))
+        await pilot.pause()
+
+        assert chat_log.wrap is True
+        assert chat_log.min_width == 1
+        assert len(chat_log.lines) >= 2
 
 
 @pytest.mark.asyncio
