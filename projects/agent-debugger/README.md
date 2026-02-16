@@ -138,6 +138,209 @@ When at a breakpoint, use pudb-style keys:
 
 **Implementation note:** When a breakpoint hits, the Input widget is disabled (`inp.disabled = True`). This prevents it from consuming keystrokes, so `c`/`n`/`s`/`r` go to the App's `BINDINGS` instead. When the user presses `c` (continue), the Input is re-enabled and re-focused.
 
+## Extensions
+
+adb supports optional extensions that customize how your agent's data is displayed
+and how input is constructed. Extensions are plain Python classes — no base class
+required. adb uses duck typing, so any object with the right methods will work.
+
+Pass extensions via CLI flags using `module:Class` references:
+
+```bash
+adb attach my_module:graph \
+  --store-renderer my_ext:MyStoreRenderer \
+  --state-renderer my_ext:MyStateRenderer \
+  --output-renderer my_ext:MyChatOutputRenderer \
+  --tool-renderer my_ext:MyToolRenderer \
+  --state-mutator my_ext:MyStateMutator \
+  --input-provider my_ext:MyInputProvider
+```
+
+If a class reference is provided, adb will instantiate it (call `Class()`) and
+validate that the required methods exist. If loading fails, adb logs a warning
+and falls back to default behavior.
+
+### StoreRenderer
+
+Customizes the **Store** panel in the right sidebar.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `render_store` | `(snapshot: Mapping[str, Any]) -> MemoryRenderModel \| None` | Render store contents. `snapshot` contains `{"store_items": {...}}`. |
+
+```python
+from agent_debugger.extensions import MemoryRenderModel
+
+class MyStoreRenderer:
+    def render_store(self, snapshot):
+        items = snapshot.get("store_items", {})
+        lines = ["[bold cyan]My Store[/bold cyan]"]
+        for ns, entries in items.items():
+            lines.append(f"  {ns}: {len(entries)} items")
+        return MemoryRenderModel(lines=lines)
+```
+
+### StateRenderer
+
+Customizes the **State** panel in the right sidebar.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `render_state` | `(snapshot: Mapping[str, Any]) -> StateRenderModel \| None` | Render state contents. `snapshot` contains `{"state": {...}}`. |
+
+```python
+from agent_debugger.extensions import StateRenderModel
+
+class MyStateRenderer:
+    def render_state(self, snapshot):
+        state = snapshot.get("state", {})
+        lines = [
+            "[bold cyan]Agent State[/bold cyan]",
+            f"messages: {len(state.get('messages', []))}",
+            f"status: {state.get('status', 'unknown')}",
+        ]
+        return StateRenderModel(lines=lines)
+```
+
+### ChatOutputRenderer
+
+Customizes how agent responses appear in the **main chat pane**. This is useful
+when your agent returns structured output (e.g., JSON with a `text` field and
+metadata) and you want to display only the relevant parts.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `can_render` | `(payload: Mapping[str, Any]) -> bool` | Return `True` if this renderer handles the given payload. |
+| `render_chat_output` | `(payload, state, messages) -> ChatRenderModel \| None` | Render the payload into display lines. |
+
+The `payload` dict contains the raw agent response (e.g., `additional_kwargs.parsed`
+from the AI message, or parsed JSON content). Lines support
+[Rich markup](https://rich.readthedocs.io/en/latest/markup.html) for styling.
+
+```python
+from agent_debugger.extensions import ChatRenderModel
+
+class MyChatOutputRenderer:
+    def can_render(self, payload):
+        return "text" in payload
+
+    def render_chat_output(self, payload, state, messages):
+        text = payload.get("text", "")
+        lines = [text]
+        recs = payload.get("recommendations", [])
+        if recs:
+            lines.append("")
+            lines.append("[bold]Recommendations:[/bold]")
+            for i, rec in enumerate(recs, 1):
+                title = rec.get("title", "")
+                lines.append(f"  {i}. [cyan]{title}[/cyan]")
+        return ChatRenderModel(lines=lines)
+```
+
+### ToolRenderer
+
+Customizes the **Tools** tab in the bottom panel.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `render_tools` | `(snapshot: Mapping[str, Any]) -> ToolRenderModel \| None` | Render tool call history. `snapshot` contains `{"tool_calls": [...]}`. |
+
+Each tool call dict has keys: `name`, `args`, `result`, `error`, `node`, `turn`.
+
+```python
+from agent_debugger.extensions import ToolRenderModel
+
+class MyToolRenderer:
+    def render_tools(self, snapshot):
+        calls = snapshot.get("tool_calls", [])
+        lines = [f"[bold]Tools ({len(calls)} calls)[/bold]"]
+        for call in calls:
+            name = call.get("name", "?")
+            status = "[red]error[/red]" if call.get("error") else "[green]ok[/green]"
+            lines.append(f"  {name} — {status}")
+        return ToolRenderModel(lines=lines)
+```
+
+### StateMutator
+
+Handles custom `/clear <mutation>` commands (e.g., `/clear memory`).
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `mutate_state` | `(mutation, args, current_state, runner) -> StateMutationResult \| None` | Apply a named mutation. `runner` provides access to the graph and store. |
+
+```python
+from agent_debugger.extensions import StateMutationResult
+
+class MyStateMutator:
+    def mutate_state(self, mutation, args, current_state, runner):
+        if mutation != "memory":
+            return StateMutationResult(applied=False, message="Unknown mutation.")
+        store = getattr(getattr(runner, "graph", None), "store", None)
+        if store is None:
+            return StateMutationResult(applied=False, message="No store configured.")
+        # ... clear store entries ...
+        return StateMutationResult(applied=True, message="Memory cleared.")
+```
+
+### InputProvider
+
+Customizes the input dict sent to `graph.stream()`. Use this when your agent's
+state schema requires fields beyond `messages` (e.g., `user_id`).
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `build_input` | `(message: str) -> dict[str, Any]` | Build the input dict. Must include a `"messages"` key. |
+
+```python
+import getpass
+
+class MyInputProvider:
+    def build_input(self, message):
+        return {
+            "messages": [{"role": "human", "content": message}],
+            "user_id": getpass.getuser(),
+        }
+```
+
+### Render model line format
+
+All render models (`MemoryRenderModel`, `StateRenderModel`, `ChatRenderModel`,
+`ToolRenderModel`) contain a `lines: list[str]` field. Each string is rendered
+as a separate line in the UI and supports
+[Rich console markup](https://rich.readthedocs.io/en/latest/markup.html):
+
+```
+[bold cyan]Title[/bold cyan]       # bold cyan text
+[dim]subtitle[/dim]               # dimmed text
+[green]success[/green]            # green text
+[red]error[/red]                  # red text
+```
+
+If markup parsing fails for a line, adb falls back to rendering it as plain text.
+
+### Full example
+
+See [`examples/simple_extensions.py`](examples/simple_extensions.py) for a
+working implementation of `StoreRenderer`, `ChatOutputRenderer`, `ToolRenderer`,
+and `StateMutator`.
+
+## CLI Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--env-file` | `.env` | Path to a dotenv file to load before starting. |
+| `--thread-id`, `-t` | — | Thread ID for checkpointed graphs. |
+| `--store-renderer` | — | Store panel renderer (`module:Class`). |
+| `--state-renderer` | — | State panel renderer (`module:Class`). |
+| `--output-renderer` | — | Chat output renderer (`module:Class`). |
+| `--tool-renderer` | — | Tools panel renderer (`module:Class`). |
+| `--state-mutator` | — | State mutator for `/clear` commands (`module:Class`). |
+| `--input-provider` | — | Input provider for custom graph input (`module:Class`). |
+| `--store-prefix` | — | Backend store namespace prefix (comma-separated). |
+| `--store-max-namespaces` | `20` | Max store namespaces to display. |
+| `--store-items-per-namespace` | `20` | Max items per namespace to display. |
+
 ## Design
 
 See [`Design.md`](docs/Design.md).
