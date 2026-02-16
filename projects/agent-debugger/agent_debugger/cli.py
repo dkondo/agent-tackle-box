@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from queue import Queue
 from typing import Any
@@ -163,7 +164,7 @@ def _parse_store_prefix(raw: str | None) -> tuple[str, ...] | None:
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="adb")
+@click.version_option(version=pkg_version("agent-debugger"), prog_name="adb")
 def main() -> None:
     """adb: Agent Debugger for LangChain/LangGraph."""
     pass
