@@ -70,13 +70,23 @@ Store data is backend-first and separate from graph state:
 - Store panel never infers backend data from state when no backend snapshot exists.
 - `StateUpdateEvent` carries both state and store metadata (`store_items`, `store_source`, `store_error`).
 
+## Event Streaming
+The worker and UI threads communicate through a typed event pipeline:
+
+**Worker thread** (`runner.py`): `AgentRunner._run_in_thread` calls `graph.stream()` with `stream_mode=["debug", "values", "updates"]`. Each chunk is processed by `_process_stream_chunk`, which converts LangGraph stream data into typed event dataclasses (`NodeStartEvent`, `ToolCallEvent`, `StateUpdateEvent`, etc.) and puts them on `self.event_queue`.
+
+**Main thread** (`app.py`): `DebuggerApp` polls the queue on a 50ms timer via `_poll_events`, which calls `event_queue.get_nowait()` in a loop and dispatches each event to `_handle_event`. That method pattern-matches on the event type and updates the appropriate UI panel — `StatePanel`, `ToolCallsPanel`, `MessagesPanel`, `ChatLog`, etc.
+
+Deduplication: The runner tracks seen tool calls, tool results, and agent responses across invocations (`_seen_tool_calls`, `_seen_tool_results`, `_seen_responses`) to prevent re-emitting historical events when the `updates` stream replays message lists.
+
 ## End-to-End Flow
 1. User enters text in the TUI.
 2. UI invokes `AgentRunner` on worker thread.
-3. Runner streams graph events, tracer emits callback-driven events.
-4. UI updates state/messages/tools/diff/store in near-real time.
-5. If a breakpoint triggers, worker blocks; UI drives stepping via command queue.
-6. On `RunFinishedEvent`, UI clears processing state and returns to interactive input.
+3. Runner calls `graph.stream()` and feeds each chunk through `_process_stream_chunk`.
+4. Stream chunks become typed events on `event_queue`; tracer emits `BreakpointHit` events via callbacks.
+5. UI polls the queue every 50ms and dispatches events to panel update methods.
+6. If a breakpoint triggers, worker blocks; UI drives stepping via `command_queue`.
+7. On `RunFinishedEvent`, UI clears processing state and returns to interactive input.
 
 ## Why It Works
 The key design decision is pairing a LangGraph callback handler with `bdb` in one tracer while running agent execution in a dedicated worker thread. That preserves responsive UI rendering, semantic agent inspection, and precise line-level debugging in a single terminal workflow.
