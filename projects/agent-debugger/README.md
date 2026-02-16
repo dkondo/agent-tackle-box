@@ -1,16 +1,16 @@
 # adb: Agent Debugger for LangChain/LangGraph
 
-A TUI debugger that combines application-level agent inspection (state, memory, tool calls, messages) with Python-level debugging (breakpoints, stepping, variable inspection).
+A terminal UI debugger that combines application-level agent inspection (state, memory, tool calls, messages) with Python-level debugging (breakpoints, stepping, variable inspection).
 
 ## Motivation
 
 An agent developer needs to answer two kinds of questions simultaneously:
 
-1. **Application-level**: "Which node ran? What tool was called? How did state change?"
+1. **Application-level**: "How did state or memory change? What tools were called and how?"
     
 2. **Code-level**: "Why did this node produce that output? What's in the local variables at line 42? Why did the conditional branch go left?"
     
-Today you have to choose one or the other. When you stop at a breakpoint inside a node, you want to see _both_ the Python locals _and_ the graph-level context (which node, what triggered it, the full agent state). A combined debugger makes "zoom in / zoom out" seamless
+When you stop at a breakpoint inside a node, you want to see _both_ the Python locals _and_ the graph-level context (which node, what triggered it, the full agent state). A combined debugger makes "zoom in / zoom out" seamless
 
 ## Quick Start
 
