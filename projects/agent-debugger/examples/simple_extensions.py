@@ -8,6 +8,7 @@ from agent_debugger.extensions import (
     ChatRenderModel,
     MemoryRenderModel,
     StateMutationResult,
+    ToolRenderModel,
 )
 
 MEMORY_NAMESPACE_PREFIX = "memories/simple_agent/"
@@ -142,3 +143,43 @@ class SimpleStateMutator:
             applied=True,
             message="No simple-agent store items to clear.",
         )
+
+
+class SimpleToolRenderer:
+    """Render tool history with per-turn grouping and compact results."""
+
+    def render_tools(self, snapshot: Mapping[str, Any]) -> ToolRenderModel | None:
+        calls = snapshot.get("tool_calls")
+        if not isinstance(calls, list) or not calls:
+            return None
+
+        lines: list[str] = ["[bold cyan]Simple Tool History[/bold cyan]"]
+        current_turn: int | None = None
+
+        for idx, call in enumerate(calls, start=1):
+            if not isinstance(call, dict):
+                continue
+
+            turn = call.get("turn")
+            if isinstance(turn, int) and turn != current_turn:
+                current_turn = turn
+                lines.append(f"[bold yellow]Turn {turn}[/bold yellow]")
+
+            name = str(call.get("name", "tool"))
+            node = call.get("node")
+            prefix = f"[{node}] " if node else ""
+            lines.append(f"{prefix}{idx}. {name}")
+
+            args = call.get("args")
+            if isinstance(args, dict):
+                lines.append(f"   [dim]args:[/dim] {args}")
+
+            if call.get("error"):
+                lines.append(f"   [red]error:[/red] {call['error']}")
+            elif call.get("result") is not None:
+                result = str(call["result"])
+                if len(result) > 120:
+                    result = result[:117] + "..."
+                lines.append(f"   [green]result:[/green] {result}")
+
+        return ToolRenderModel(lines=lines)

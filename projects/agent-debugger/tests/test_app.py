@@ -17,12 +17,15 @@ from agent_debugger.events import (
     DebugCommand,
     RunFinishedEvent,
     StateUpdateEvent,
+    ToolCallEvent,
+    ToolResultEvent,
 )
 from agent_debugger.extensions import (
     ChatRenderModel,
     MemoryRenderModel,
     StateRenderModel,
     StateMutationResult,
+    ToolRenderModel,
 )
 from agent_debugger.runner import AgentRunner
 from agent_debugger.tracer import AgentTracer
@@ -62,6 +65,7 @@ def _make_app(
     store_renderer=None,
     state_renderer=None,
     output_renderer=None,
+    tool_renderer=None,
     state_mutator=None,
 ):
     """Create a DebuggerApp for testing."""
@@ -77,6 +81,7 @@ def _make_app(
         store_renderer=store_renderer,
         state_renderer=state_renderer,
         output_renderer=output_renderer,
+        tool_renderer=tool_renderer,
         state_mutator=state_mutator,
     )
 
@@ -549,6 +554,79 @@ async def test_output_renderer_handles_claimed_payload():
 
 
 @pytest.mark.asyncio
+async def test_output_renderer_empty_lines_falls_back_to_plain_text():
+    """Empty renderer output should not suppress response text fallback."""
+
+    class _OutputRenderer:
+        def can_render(self, payload):
+            return True
+
+        def render_chat_output(self, payload, state, messages):
+            return ChatRenderModel(lines=[])
+
+    app = _make_app(output_renderer=_OutputRenderer())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text="fallback text",
+                payload={"type": "ai"},
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("fallback text" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_tool_renderer_is_used_for_tool_panel():
+    """Tool renderer should replace default tool panel rendering."""
+
+    class _ToolRenderer:
+        def render_tools(self, snapshot):
+            assert isinstance(snapshot.get("tool_calls"), list)
+            return ToolRenderModel(lines=["[bold]custom tools[/bold]"])
+
+    app = _make_app(tool_renderer=_ToolRenderer())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._turn_counter = 1
+        app._handle_event(
+            ToolCallEvent(
+                name="search",
+                args={"query": "gifts"},
+                tool_call_id="tc_1",
+            )
+        )
+        await pilot.pause()
+
+        panel = app.query_one("#tools-panel")
+        lines_text = [line.text for line in panel.lines]
+        assert any("custom tools" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_invoke_agent_does_not_clear_tool_history(monkeypatch):
+    """New turns should preserve the existing Tools pane history."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        panel = app.query_one("#tools-panel")
+        called = {"clear": False}
+
+        def _mark_clear():
+            called["clear"] = True
+
+        monkeypatch.setattr(panel, "clear_records", _mark_clear)
+
+        inp = app.query_one("#chat-input")
+        inp.value = "hello"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert called["clear"] is False
+
+
+@pytest.mark.asyncio
 async def test_clear_command_calls_state_mutator():
     """`/clear <mutation>` should clear local state and invoke provider."""
 
@@ -1015,3 +1093,237 @@ def test_poll_events_recovers_stale_processing_state():
     app._at_breakpoint = False
     app._poll_events()
     assert app._processing is False
+
+
+def test_runner_emits_response_for_assistant_role_messages():
+    """Assistant-role messages should produce AgentResponseEvent."""
+
+    class _Graph:
+        def stream(self, input_data, config=None, stream_mode=None):
+            yield (
+                "values",
+                {"messages": [{"role": "assistant", "content": "hello"}]},
+            )
+
+    eq = Queue()
+    runner = AgentRunner(
+        graph=_Graph(),  # type: ignore[arg-type]
+        event_queue=eq,
+        command_queue=Queue(),
+        bp_manager=BreakpointManager(),
+    )
+    runner.invoke("hello")
+
+    response = None
+    for _ in range(100):
+        try:
+            event = eq.get(timeout=0.1)
+        except Exception:
+            continue
+        if isinstance(event, AgentResponseEvent):
+            response = event
+        if isinstance(event, RunFinishedEvent):
+            break
+
+    assert response is not None
+    assert response.payload["type"] == "ai"
+    assert response.text == "hello"
+
+
+def test_runner_emits_tool_result_for_role_tool_messages():
+    """Tool-role messages should produce ToolResultEvent."""
+
+    class _Graph:
+        def stream(self, input_data, config=None, stream_mode=None):
+            yield (
+                "values",
+                {
+                    "messages": [
+                        {
+                            "role": "tool",
+                            "tool_call_id": "call_1",
+                            "content": "ok",
+                        }
+                    ]
+                },
+            )
+
+    eq = Queue()
+    runner = AgentRunner(
+        graph=_Graph(),  # type: ignore[arg-type]
+        event_queue=eq,
+        command_queue=Queue(),
+        bp_manager=BreakpointManager(),
+    )
+    runner.invoke("hello")
+
+    tool_result = None
+    for _ in range(100):
+        try:
+            event = eq.get(timeout=0.1)
+        except Exception:
+            continue
+        if isinstance(event, ToolResultEvent):
+            tool_result = event
+        if isinstance(event, RunFinishedEvent):
+            break
+
+    assert tool_result is not None
+    assert tool_result.tool_call_id == "call_1"
+    assert tool_result.result == "ok"
+
+
+@pytest.mark.asyncio
+async def test_messages_panel_renders_assistant_role_content():
+    """Messages panel should render OpenAI-style assistant roles."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            StateUpdateEvent(
+                values={
+                    "messages": [
+                        {"role": "human", "content": "hi"},
+                        {"role": "assistant", "content": "hello there"},
+                    ]
+                },
+                step=1,
+            )
+        )
+        await pilot.pause()
+
+        panel = app.query_one("#messages-panel")
+        lines_text = [line.text for line in panel.lines]
+        assert any("hello there" in text for text in lines_text)
+
+
+def test_runner_checks_state_breakpoints_against_full_state_snapshots(monkeypatch):
+    """State breakpoints should compare successive full-state snapshots."""
+    bp = BreakpointManager()
+    bp.add_state("counter")
+
+    class _Graph:
+        pass
+
+    runner = AgentRunner(
+        graph=_Graph(),  # type: ignore[arg-type]
+        event_queue=Queue(),
+        command_queue=Queue(),
+        bp_manager=bp,
+    )
+
+    hits: list[str] = []
+    monkeypatch.setattr(
+        runner.tracer,
+        "request_break_on_next_user_frame",
+        lambda: hits.append("hit"),
+    )
+
+    runner._emit_state_update({"other": 1})
+    runner._emit_state_update({"other": 1, "counter": 0})
+    runner._emit_state_update({"other": 2, "counter": 0})
+
+    assert hits == ["hit"]
+
+
+def test_step_actions_replace_pending_debug_commands(monkeypatch):
+    """Repeated step actions should keep only the most recent command."""
+    app = _make_app()
+    app._at_breakpoint = True
+    monkeypatch.setattr(app, "_log", lambda *args, **kwargs: None)
+
+    app.action_step_over()
+    app.action_step_into()
+    app.action_step_out()
+
+    assert app.command_queue.get_nowait() == DebugCommand.STEP_OUT
+    with pytest.raises(Empty):
+        app.command_queue.get_nowait()
+
+
+def test_tool_panel_filter_preserves_zero_values():
+    """Tool args filtering should keep meaningful zero values."""
+    from agent_debugger.panels.tools import ToolCallsPanel
+
+    panel = ToolCallsPanel()
+    filtered = panel._filter_empty(
+        {"offset": 0, "count": "0", "blank": "", "none": None}
+    )
+    assert filtered == {"offset": 0, "count": "0"}
+
+
+@pytest.mark.asyncio
+async def test_tool_panel_groups_calls_by_turn():
+    """Default tools panel should annotate records with turn headers."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._turn_counter = 1
+        app._handle_event(
+            ToolCallEvent(
+                name="search",
+                args={"q": "a"},
+                tool_call_id="tc_1",
+            )
+        )
+        app._turn_counter = 2
+        app._handle_event(
+            ToolCallEvent(
+                name="rank",
+                args={"q": "b"},
+                tool_call_id="tc_2",
+            )
+        )
+        await pilot.pause()
+
+        panel = app.query_one("#tools-panel")
+        lines_text = [line.text for line in panel.lines]
+        assert any("Turn 1" in text for text in lines_text)
+        assert any("Turn 2" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_breakpoint_placeholder_has_no_trailing_parenthesis():
+    """Breakpoint placeholder copy should not include a trailing ')'."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.bp_manager.add_node("echo")
+        app._update_input_placeholder()
+        await pilot.pause()
+
+        inp = app.query_one("#chat-input")
+        assert not inp.placeholder.endswith(")")
+
+
+@pytest.mark.asyncio
+async def test_poll_events_recovery_reenables_input():
+    """Stale processing recovery should re-enable the input widget."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        inp = app.query_one("#chat-input")
+        app._processing = True
+        app._at_breakpoint = False
+        inp.disabled = True
+
+        app._poll_events()
+        await pilot.pause()
+
+        assert app._processing is False
+        assert inp.disabled is False
+
+
+@pytest.mark.asyncio
+async def test_breakpoint_event_failure_auto_continues_worker(monkeypatch):
+    """Breakpoint UI failures should auto-continue to avoid deadlock."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._processing = True
+
+        def _boom(_event):
+            raise RuntimeError("render failed")
+
+        monkeypatch.setattr(app, "_handle_breakpoint", _boom)
+        event = BreakpointHit(frame=sys._getframe())
+        app._handle_event(event)
+        await pilot.pause()
+
+        assert app._at_breakpoint is False
+        assert app.command_queue.get_nowait() == DebugCommand.CONTINUE

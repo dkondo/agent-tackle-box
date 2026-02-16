@@ -11,6 +11,8 @@ dependencies = [
     "rich>=13.0",
     "deepdiff>=8.0",
     "click>=8.0",
+    "python-dotenv>=1.2.1",
+    "langchain-litellm>=0.5.1",
 ]
 
 [project.optional-dependencies]

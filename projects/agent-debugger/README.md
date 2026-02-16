@@ -20,6 +20,7 @@ adb attach my_module:graph \
   --store-renderer my_mod:StoreRenderer \
   --state-renderer my_mod:StateRenderer \
   --output-renderer my_mod:ChatOutputRenderer \
+  --tool-renderer my_mod:ToolRenderer \
   --state-mutator my_mod:StateMutator
 ```
 
@@ -36,12 +37,32 @@ uv run adb run examples/simple_agent.py
 uv run python -m agent_debugger.cli run examples/simple_agent.py
 ```
 
+## Simple Agent Demo
+
+```bash
+# Run simple_agent with all demo renderer/mutator extensions
+uv run adb run examples/simple_agent.py \
+  --memory-renderer examples.simple_extensions:SimpleMemoryRenderer \
+  --output-renderer examples.simple_extensions:SimpleChatOutputRenderer \
+  --tool-renderer examples.simple_extensions:SimpleToolRenderer \
+  --state-mutator examples.simple_extensions:SimpleStateMutator
+
+# Optional: enable LiteLLM tool-calling path in examples/simple_agent.py
+# (example model uses Vertex + service account/ADC auth)
+USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/simple_agent.py \
+  --memory-renderer examples.simple_extensions:SimpleMemoryRenderer \
+  --output-renderer examples.simple_extensions:SimpleChatOutputRenderer \
+  --tool-renderer examples.simple_extensions:SimpleToolRenderer \
+  --state-mutator examples.simple_extensions:SimpleStateMutator
+```
+
 ## Features
 
 - **Application-level debugging**: See agent state, messages, tool calls, state diffs
 - **Code-level debugging**: Set breakpoints, step through code, inspect variables
 - **Agent-level breakpoints**: Break on node start, tool call, or state change
 - **Optional renderers/providers**: Custom state, store, memory, chat output, and state mutation hooks
+- **Persistent tool history**: Tool calls are kept across turns in the Tools pane and grouped by turn
 - **`import agent_debugger as adb; adb.set_trace()`**: Drop into the debugger from anywhere in your agent code
 
 ## Usage

@@ -34,6 +34,11 @@ class DummyStateRenderer:
         return None
 
 
+class DummyToolRenderer:
+    def render_tools(self, snapshot):
+        return None
+
+
 class DummyStateMutator:
     def mutate_state(self, mutation, args, current_state, runner):
         return None
@@ -202,6 +207,8 @@ def test_attach_loads_optional_extensions(monkeypatch):
             "tests.test_cli:DummyStoreRenderer",
             "--state-renderer",
             "tests.test_cli:DummyStateRenderer",
+            "--tool-renderer",
+            "tests.test_cli:DummyToolRenderer",
             "--state-mutator",
             "tests.test_cli:DummyStateMutator",
         ],
@@ -212,6 +219,7 @@ def test_attach_loads_optional_extensions(monkeypatch):
     assert isinstance(captured["store_renderer"], DummyStoreRenderer)
     assert isinstance(captured["state_renderer"], DummyStateRenderer)
     assert isinstance(captured["output_renderer"], DummyOutputRenderer)
+    assert isinstance(captured["tool_renderer"], DummyToolRenderer)
     assert isinstance(
         captured["state_mutator"],
         DummyStateMutator,
