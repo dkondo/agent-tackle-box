@@ -126,3 +126,7 @@ When at a breakpoint, use pudb-style keys:
 | `r` | Step out (return / finish) |
 
 **Implementation note:** When a breakpoint hits, the Input widget is disabled (`inp.disabled = True`). This prevents it from consuming keystrokes, so `c`/`n`/`s`/`r` go to the App's `BINDINGS` instead. When the user presses `c` (continue), the Input is re-enabled and re-focused.
+
+## Design
+
+See [`Design.md`](docs/Design.md).
