@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import FrameType
-from typing import Any, Union
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Commands: UI -> worker thread
@@ -130,15 +129,15 @@ class RunFinishedEvent:
 
 
 # Union type for all events
-DebugEvent = Union[
-    NodeStartEvent,
-    NodeEndEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-    StateUpdateEvent,
-    BreakpointHit,
-    AgentResponseEvent,
-    AgentErrorEvent,
-    StreamTokenEvent,
-    RunFinishedEvent,
-]
+DebugEvent = (
+    NodeStartEvent
+    | NodeEndEvent
+    | ToolCallEvent
+    | ToolResultEvent
+    | StateUpdateEvent
+    | BreakpointHit
+    | AgentResponseEvent
+    | AgentErrorEvent
+    | StreamTokenEvent
+    | RunFinishedEvent
+)

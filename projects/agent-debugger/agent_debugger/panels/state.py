@@ -34,9 +34,7 @@ class StatePanel(Static):
         self._custom_lines = None
         self._refresh_display()
 
-    def update_custom_lines(
-        self, lines: list[str], *, state: dict[str, Any] | None = None
-    ) -> None:
+    def update_custom_lines(self, lines: list[str], *, state: dict[str, Any] | None = None) -> None:
         """Update the state display with pre-rendered lines."""
         if state is not None:
             self._state = state
@@ -80,9 +78,7 @@ class StatePanel(Static):
         lines: list[str] = []
 
         if self._current_node:
-            lines.append(
-                f"[bold magenta]node:[/bold magenta] {self._current_node}"
-            )
+            lines.append(f"[bold magenta]node:[/bold magenta] {self._current_node}")
 
         if self._custom_lines is not None:
             if self._custom_lines:
@@ -100,8 +96,7 @@ class StatePanel(Static):
             count = len(messages)
             indicator = "▼" if self._messages_expanded else "▶"
             lines.append(
-                f"[cyan]{indicator} messages:[/cyan] [{count}]"
-                " [dim](click to toggle)[/dim]"
+                f"[cyan]{indicator} messages:[/cyan] [{count}] [dim](click to toggle)[/dim]"
             )
             if self._messages_expanded and messages:
                 for i, msg in reversed(list(enumerate(messages))):
@@ -111,9 +106,7 @@ class StatePanel(Static):
 
                     if msg_type == "human":
                         display = self._format_content(content)
-                        lines.append(
-                            f"  [green]{i}. user:[/green] {display}"
-                        )
+                        lines.append(f"  [green]{i}. user:[/green] {display}")
                     elif msg_type == "ai":
                         if tool_calls:
                             names = ", ".join(
@@ -122,25 +115,15 @@ class StatePanel(Static):
                                 else getattr(tc, "name", "?")
                                 for tc in tool_calls
                             )
-                            lines.append(
-                                f"  [cyan]{i}. ai:[/cyan]"
-                                f" [dim]tools: {names}[/dim]"
-                            )
+                            lines.append(f"  [cyan]{i}. ai:[/cyan] [dim]tools: {names}[/dim]")
                         elif content:
                             display = self._format_content(content)
-                            lines.append(
-                                f"  [cyan]{i}. ai:[/cyan] {display}"
-                            )
+                            lines.append(f"  [cyan]{i}. ai:[/cyan] {display}")
                         else:
-                            lines.append(
-                                f"  [cyan]{i}. ai:[/cyan]"
-                                " [dim](empty)[/dim]"
-                            )
+                            lines.append(f"  [cyan]{i}. ai:[/cyan] [dim](empty)[/dim]")
                     elif msg_type == "tool":
                         name = message_name(msg, "tool")
-                        lines.append(
-                            f"  [yellow]{i}. tool:[/yellow] {name}"
-                        )
+                        lines.append(f"  [yellow]{i}. tool:[/yellow] {name}")
                     elif msg_type == "system":
                         lines.append(f"  [red]{i}. system[/red]")
                     else:

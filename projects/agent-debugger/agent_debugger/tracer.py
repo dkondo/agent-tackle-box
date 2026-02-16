@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import bdb
-import linecache
 import sys
 import threading
 from queue import Queue
@@ -368,9 +367,7 @@ class AgentTracer(bdb.Bdb, BaseCallbackHandler):
         if node_name is None:
             node_name = self._current_node
 
-        self._current_node = (
-            self._node_stack[-1][1] if self._node_stack else None
-        )
+        self._current_node = self._node_stack[-1][1] if self._node_stack else None
 
         if node_name:
             result = outputs if isinstance(outputs, dict) else {}
@@ -407,9 +404,7 @@ class AgentTracer(bdb.Bdb, BaseCallbackHandler):
         if node_name is None:
             node_name = self._current_node
 
-        self._current_node = (
-            self._node_stack[-1][1] if self._node_stack else None
-        )
+        self._current_node = self._node_stack[-1][1] if self._node_stack else None
 
         if node_name:
             self.event_queue.put(
@@ -480,9 +475,7 @@ class AgentTracer(bdb.Bdb, BaseCallbackHandler):
         """Block the worker thread until the UI sends a command."""
         return self.command_queue.get()
 
-    def _dispatch_command(
-        self, cmd: DebugCommand, frame: FrameType
-    ) -> None:
+    def _dispatch_command(self, cmd: DebugCommand, frame: FrameType) -> None:
         """Execute a debug command from the UI."""
         self._last_debug_command = cmd
         if cmd == DebugCommand.CONTINUE:

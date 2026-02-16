@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from agent_debugger.extensions import (
     ChatRenderModel,
@@ -18,9 +19,7 @@ MEMORY_KEY = "session"
 class SimpleMemoryRenderer:
     """Render simple agent memory in a custom panel format."""
 
-    def render_memory(
-        self, snapshot: Mapping[str, Any]
-    ) -> MemoryRenderModel | None:
+    def render_memory(self, snapshot: Mapping[str, Any]) -> MemoryRenderModel | None:
         store_items = snapshot.get("store_items", {})
         if not isinstance(store_items, dict):
             return None

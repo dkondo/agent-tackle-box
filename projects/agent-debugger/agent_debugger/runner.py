@@ -15,7 +15,6 @@ from agent_debugger.breakpoints import BreakpointManager
 from agent_debugger.events import (
     AgentErrorEvent,
     AgentResponseEvent,
-    DebugCommand,
     RunFinishedEvent,
     StateUpdateEvent,
     ToolCallEvent,
@@ -64,6 +63,7 @@ class AgentRunner:
         self._run_count: int = 0
         self._seen_tool_calls: set[str] = set()
         self._seen_tool_results: set[tuple[str, str, str]] = set()
+        self._seen_responses: set[str] = set()
         self._last_state_signature: str | None = None
         self._last_state_for_breakpoints: dict[str, Any] = {}
         self._store_namespace_prefix = store_namespace_prefix
@@ -103,6 +103,7 @@ class AgentRunner:
         self._run_count += 1
         self._seen_tool_calls = set()
         self._seen_tool_results = set()
+        self._seen_responses = set()
         self._last_state_signature = None
         self._last_state_for_breakpoints = {}
 
@@ -251,9 +252,7 @@ class AgentRunner:
         """Whether the agent is currently running."""
         return self._thread is not None and self._thread.is_alive()
 
-    def _build_runtime_config(
-        self, *, include_callbacks: bool
-    ) -> dict[str, Any]:
+    def _build_runtime_config(self, *, include_callbacks: bool) -> dict[str, Any]:
         """Build runtime config from configured options."""
         config: dict[str, Any] = {}
         if include_callbacks:
@@ -273,9 +272,7 @@ class AgentRunner:
         next_nodes: list[str] | None = None,
     ) -> None:
         """Emit StateUpdateEvent only when state changed."""
-        if self.bp_manager.should_break_on_state(
-            self._last_state_for_breakpoints, values
-        ):
+        if self.bp_manager.should_break_on_state(self._last_state_for_breakpoints, values):
             self.tracer.request_break_on_next_user_frame()
         self._last_state_for_breakpoints = self._safe_state_copy(values)
 
@@ -293,9 +290,7 @@ class AgentRunner:
                 default=str,
             )
         except Exception:
-            signature = str(
-                (values, store_items, store_source, store_error)
-            )
+            signature = str((values, store_items, store_source, store_error))
 
         if signature == self._last_state_signature:
             return
@@ -353,9 +348,18 @@ class AgentRunner:
                 if hasattr(msg, attr):
                     payload[attr] = getattr(msg, attr)
 
+        text = content_to_text(content)
+        try:
+            sig = json.dumps(payload, sort_keys=True, default=str)
+        except Exception:
+            sig = repr((text, payload))
+        if sig in self._seen_responses:
+            return
+        self._seen_responses.add(sig)
+
         self.event_queue.put(
             AgentResponseEvent(
-                text=content_to_text(content),
+                text=text,
                 payload=payload,
             )
         )

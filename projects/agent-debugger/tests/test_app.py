@@ -23,8 +23,8 @@ from agent_debugger.events import (
 from agent_debugger.extensions import (
     ChatRenderModel,
     MemoryRenderModel,
-    StateRenderModel,
     StateMutationResult,
+    StateRenderModel,
     ToolRenderModel,
 )
 from agent_debugger.runner import AgentRunner
@@ -90,7 +90,7 @@ def _make_app(
 async def test_app_composes():
     """Test that the app composes without errors."""
     app = _make_app()
-    async with app.run_test(size=(120, 40)) as pilot:
+    async with app.run_test(size=(120, 40)) as _pilot:
         assert app.query_one("#chat-log") is not None
         assert app.query_one("#state-panel") is not None
         assert app.query_one("#tools-panel") is not None
@@ -136,10 +136,7 @@ async def test_break_node_missing_shows_error_and_does_not_add_breakpoint():
         assert app.bp_manager.breakpoints == []
         chat_log = app.query_one("#chat-log")
         lines_text = [line.text for line in chat_log.lines]
-        assert any(
-            "Error: node 'does_not_exist' does not exist." in text
-            for text in lines_text
-        )
+        assert any("Error: node 'does_not_exist' does not exist." in text for text in lines_text)
 
 
 @pytest.mark.asyncio
@@ -162,9 +159,7 @@ async def test_breakpoint_banner_not_repeated_when_stepping():
 
         chat_log = app.query_one("#chat-log")
         lines_text = [line.text for line in chat_log.lines]
-        breakpoint_lines = [
-            text for text in lines_text if "⏸ Breakpoint:" in text
-        ]
+        breakpoint_lines = [text for text in lines_text if "⏸ Breakpoint:" in text]
         assert len(breakpoint_lines) == 1
 
 
@@ -473,9 +468,7 @@ async def test_memory_renderer_is_ignored_without_backend_store_snapshot():
 
     app = _make_app(memory_renderer=_MemoryRenderer())
     async with app.run_test(size=(120, 40)) as pilot:
-        app._handle_event(
-            StateUpdateEvent(values={"memory": {"k": "v"}}, step=1)
-        )
+        app._handle_event(StateUpdateEvent(values={"memory": {"k": "v"}}, step=1))
         await pilot.pause()
         store_panel = app.query_one("#store-panel")
         assert store_panel.custom_lines is None
@@ -536,9 +529,7 @@ async def test_output_renderer_handles_claimed_payload():
 
         def render_chat_output(self, payload, state, messages):
             self.called = True
-            return ChatRenderModel(
-                lines=["[bold green]Recommendations[/bold green]"]
-            )
+            return ChatRenderModel(lines=["[bold green]Recommendations[/bold green]"])
 
     renderer = _OutputRenderer()
     app = _make_app(output_renderer=renderer)
@@ -627,6 +618,35 @@ async def test_invoke_agent_does_not_clear_tool_history(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_tools_panel_shows_most_recent_tool_call_first():
+    """Tools pane should render the latest tool call at the top."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._turn_counter = 1
+        app._handle_event(
+            ToolCallEvent(
+                name="first_tool",
+                args={},
+                tool_call_id="tc_first",
+            )
+        )
+        app._handle_event(
+            ToolCallEvent(
+                name="second_tool",
+                args={},
+                tool_call_id="tc_second",
+            )
+        )
+        await pilot.pause()
+
+        panel = app.query_one("#tools-panel")
+        lines_text = [line.text for line in panel.lines]
+        second_index = next(i for i, text in enumerate(lines_text) if "second_tool" in text)
+        first_index = next(i for i, text in enumerate(lines_text) if "first_tool" in text)
+        assert second_index < first_index
+
+
+@pytest.mark.asyncio
 async def test_clear_command_calls_state_mutator():
     """`/clear <mutation>` should clear local state and invoke provider."""
 
@@ -695,9 +715,7 @@ def test_tracer_breakpoint_and_continue():
     assert hit is not None, "Breakpoint should have fired"
     assert hit.node == "greeter"
     # Should land in the actual user file, not <string> or queue.py
-    assert "simple_agent" in hit.filename, (
-        f"Expected simple_agent.py, got {hit.filename}"
-    )
+    assert "simple_agent" in hit.filename, f"Expected simple_agent.py, got {hit.filename}"
 
     # Send continue
     cq.put(DebugCommand.CONTINUE)
@@ -751,8 +769,8 @@ def test_tracer_line_breakpoint_and_continue():
 
 def test_tracer_nested_chain_start_end_attribution():
     """Test nested chain callbacks emit correctly attributed end events."""
-    from examples.simple_agent import graph
     from agent_debugger.events import NodeEndEvent, NodeStartEvent
+    from examples.simple_agent import graph
 
     eq = Queue()
     cq = Queue()
@@ -1068,9 +1086,7 @@ def test_update_input_placeholder_logs_widget_errors(monkeypatch):
     monkeypatch.setattr(app, "_log", _fake_log)
 
     app._update_input_placeholder()
-    assert any(
-        "Failed to update input placeholder" in m for m in messages
-    )
+    assert any("Failed to update input placeholder" in m for m in messages)
 
 
 def test_log_falls_back_to_stderr_when_logs_panel_missing(monkeypatch, capsys):
@@ -1245,9 +1261,7 @@ def test_tool_panel_filter_preserves_zero_values():
     from agent_debugger.panels.tools import ToolCallsPanel
 
     panel = ToolCallsPanel()
-    filtered = panel._filter_empty(
-        {"offset": 0, "count": "0", "blank": "", "none": None}
-    )
+    filtered = panel._filter_empty({"offset": 0, "count": "0", "blank": "", "none": None})
     assert filtered == {"offset": 0, "count": "0"}
 
 
@@ -1278,6 +1292,9 @@ async def test_tool_panel_groups_calls_by_turn():
         lines_text = [line.text for line in panel.lines]
         assert any("Turn 1" in text for text in lines_text)
         assert any("Turn 2" in text for text in lines_text)
+        turn_2_index = next(i for i, text in enumerate(lines_text) if "Turn 2" in text)
+        turn_1_index = next(i for i, text in enumerate(lines_text) if "Turn 1" in text)
+        assert turn_2_index < turn_1_index
 
 
 @pytest.mark.asyncio

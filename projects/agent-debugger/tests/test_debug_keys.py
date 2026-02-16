@@ -2,10 +2,7 @@
 
 import sys
 import threading
-import time
 from queue import Queue
-
-import pytest
 
 from agent_debugger.app import DebuggerApp
 from agent_debugger.breakpoints import BreakpointManager
@@ -84,7 +81,7 @@ def test_step_over_command_direct():
     # Each hit should be on a different line
     lines = [h.lineno for h in hits]
     assert len(set(lines)) > 1, f"Expected different lines, got {lines}"
-    print(f"Step over produced {len(hits)} hits on lines: {lines}")
+    assert len(hits) >= 2  # sanity: step-over produced multiple hits
 
 
 def test_user_return_after_continue_does_not_wait_for_command(monkeypatch):

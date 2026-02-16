@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
 
@@ -10,10 +10,10 @@ from typing import Any
 class BreakpointType(Enum):
     """Types of breakpoints adb supports."""
 
-    LINE = auto()        # Standard Python: file:line
-    NODE = auto()        # Agent-level: break when graph node starts
-    TOOL = auto()        # Agent-level: break when tool is called
-    STATE = auto()       # Agent-level: break when state key changes
+    LINE = auto()  # Standard Python: file:line
+    NODE = auto()  # Agent-level: break when graph node starts
+    TOOL = auto()  # Agent-level: break when tool is called
+    STATE = auto()  # Agent-level: break when state key changes
     TRANSITION = auto()  # Agent-level: break on every node transition
 
 
@@ -91,9 +91,7 @@ class BreakpointManager:
 
     def add_line(self, filename: str, lineno: int) -> Breakpoint:
         """Add a Python line breakpoint."""
-        bp = Breakpoint(
-            type=BreakpointType.LINE, filename=filename, lineno=lineno
-        )
+        bp = Breakpoint(type=BreakpointType.LINE, filename=filename, lineno=lineno)
         self._breakpoints.append(bp)
         return bp
 
@@ -140,9 +138,7 @@ class BreakpointManager:
                 return True
         return False
 
-    def should_break_on_state(
-        self, old_state: dict[str, Any], new_state: dict[str, Any]
-    ) -> bool:
+    def should_break_on_state(self, old_state: dict[str, Any], new_state: dict[str, Any]) -> bool:
         """Check if a watched state key changed."""
         for bp in self._breakpoints:
             if not bp.enabled:
@@ -161,9 +157,7 @@ class BreakpointManager:
         return {
             bp.name
             for bp in self._breakpoints
-            if bp.enabled
-            and bp.type == BreakpointType.NODE
-            and bp.name
+            if bp.enabled and bp.type == BreakpointType.NODE and bp.name
         }
 
     @property
@@ -172,18 +166,13 @@ class BreakpointManager:
         return {
             bp.name
             for bp in self._breakpoints
-            if bp.enabled
-            and bp.type == BreakpointType.TOOL
-            and bp.name
+            if bp.enabled and bp.type == BreakpointType.TOOL and bp.name
         }
 
     @property
     def has_transition_break(self) -> bool:
         """Whether any transition breakpoint is active."""
-        return any(
-            bp.enabled and bp.type == BreakpointType.TRANSITION
-            for bp in self._breakpoints
-        )
+        return any(bp.enabled and bp.type == BreakpointType.TRANSITION for bp in self._breakpoints)
 
     @property
     def line_breakpoints(self) -> list[Breakpoint]:
@@ -201,9 +190,6 @@ class BreakpointManager:
     def has_line_breakpoints(self) -> bool:
         """Whether any Python line breakpoints are active."""
         return any(
-            bp.enabled
-            and bp.type == BreakpointType.LINE
-            and bp.filename
-            and bp.lineno is not None
+            bp.enabled and bp.type == BreakpointType.LINE and bp.filename and bp.lineno is not None
             for bp in self._breakpoints
         )

@@ -26,8 +26,7 @@ def set_trace() -> None:
         _tracer = AgentTracer.get_current()
         if _tracer is None:
             raise RuntimeError(
-                "No adb debugger is running. "
-                "Launch your agent with: adb run <script.py>"
+                "No adb debugger is running. Launch your agent with: adb run <script.py>"
             )
 
     frame = sys._getframe().f_back

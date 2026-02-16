@@ -2,10 +2,13 @@
 
 Run with: uv run adb run examples/simple_agent.py
 
-Requires:
+Optional LiteLLM path:
 - Install `langchain-litellm` and `python-dotenv`
 - Set `USE_LITELLM=1` in .env
 - Optional: set `LITELLM_MODEL` (default: `gemini/gemini-2.0-flash`)
+
+Default path:
+- Deterministic, no-tool-call response generation when `USE_LITELLM` is unset.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ if load_dotenv is not None:
 
 MEMORY_PREFIX = ("memories", "simple_agent")
 MEMORY_KEY = "session"
+MESSAGE_HISTORY_KEY = "messages"
 USE_LITELLM_ENV = "USE_LITELLM"
 DEFAULT_LITELLM_MODEL = "gemini/gemini-2.0-flash"
 
@@ -128,6 +132,64 @@ def _message_text(msg: Any) -> str:
     return _content_to_text(getattr(msg, "content", ""))
 
 
+def _message_tool_call_id(msg: Any) -> str:
+    if isinstance(msg, dict):
+        return str(msg.get("tool_call_id", ""))
+    return str(getattr(msg, "tool_call_id", ""))
+
+
+def _message_name(msg: Any) -> str:
+    if isinstance(msg, dict):
+        return str(msg.get("name", ""))
+    return str(getattr(msg, "name", ""))
+
+
+def _message_tool_calls(msg: Any) -> list[Any]:
+    if isinstance(msg, dict):
+        calls = msg.get("tool_calls", [])
+    else:
+        calls = getattr(msg, "tool_calls", [])
+    if not isinstance(calls, list):
+        return []
+    return calls
+
+
+def _message_key(msg: Any) -> tuple[str, str, str, str, str]:
+    return (
+        _message_type(msg).lower(),
+        _message_text(msg),
+        _message_tool_call_id(msg),
+        _message_name(msg),
+        repr(_message_tool_calls(msg)),
+    )
+
+
+def _messages_equal(a: Any, b: Any) -> bool:
+    return _message_key(a) == _message_key(b)
+
+
+def _merge_message_history(history: list[Any], incoming: list[Any]) -> list[Any]:
+    """Merge prior history with incoming state messages without duplicate suffixes."""
+    history_items = list(history)
+    incoming_items = list(incoming)
+    if not history_items:
+        return incoming_items
+    if not incoming_items:
+        return history_items
+
+    if len(incoming_items) >= len(history_items):
+        prefix = incoming_items[: len(history_items)]
+        if all(_messages_equal(left, right) for left, right in zip(prefix, history_items)):
+            return incoming_items
+
+    if len(history_items) >= len(incoming_items):
+        suffix = history_items[-len(incoming_items) :]
+        if all(_messages_equal(left, right) for left, right in zip(suffix, incoming_items)):
+            return history_items
+
+    return [*history_items, *incoming_items]
+
+
 def _to_model_messages(messages: list[Any]) -> list[BaseMessage]:
     model_messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
     for msg in messages:
@@ -167,13 +229,12 @@ def _last_user_text(messages: list[Any]) -> str:
     return ""
 
 
+def _litellm_enabled() -> bool:
+    return os.getenv(USE_LITELLM_ENV, "").lower() in {"1", "true", "yes", "on"}
+
+
 def _get_bound_model() -> Any:
     """Get the LLM bound with tools. Requires USE_LITELLM=1 and langchain-litellm."""
-    if not os.getenv(USE_LITELLM_ENV, "").lower() in {"1", "true", "yes", "on"}:
-        raise RuntimeError(
-            f"Set {USE_LITELLM_ENV}=1 in .env to enable the LLM. "
-            "No mock LLM fallback is available."
-        )
     from langchain_litellm import ChatLiteLLM
 
     model_name = os.getenv("LITELLM_MODEL", DEFAULT_LITELLM_MODEL)
@@ -181,8 +242,74 @@ def _get_bound_model() -> Any:
     return llm.bind_tools(TOOLS)
 
 
+_deterministic_call_counter = 0
+
+
+def _next_call_id() -> str:
+    global _deterministic_call_counter
+    _deterministic_call_counter += 1
+    return f"call_{_deterministic_call_counter:04d}"
+
+
+def _deterministic_reply(messages: list[Any]) -> AIMessage:
+    """Deterministic tool-calling fallback when LiteLLM is disabled.
+
+    On the first call (user message is last), returns an AIMessage with
+    a tool_call so that ``_respond_with_optional_tool_calls`` executes
+    the tool. On the follow-up call (tool result is last), relays the
+    tool output as plain content.
+    """
+    # Follow-up after tool execution: relay the tool result.
+    last = messages[-1] if messages else None
+    if last is not None and _message_type(last).lower() == "tool":
+        return AIMessage(content=_message_text(last))
+
+    user_text = _last_user_text(messages).strip()
+    lowered = user_text.lower()
+
+    if not user_text:
+        return AIMessage(content="Hello! Tell me who you want to greet and the style.")
+
+    call_id = _next_call_id()
+
+    # Time-based greetings
+    for tod in ("morning", "afternoon", "evening"):
+        if tod in lowered:
+            lang = "spanish" if "spanish" in lowered else (
+                "french" if "french" in lowered else "english"
+            )
+            return AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "time_based_greeting",
+                    "args": {"time_of_day": tod, "language": lang},
+                    "id": call_id,
+                    "type": "tool_call",
+                }],
+            )
+
+    # Style-based greetings
+    style = (
+        "formal" if "formal" in lowered
+        else "enthusiastic" if "enthusiastic" in lowered
+        else "friendly"
+    )
+    return AIMessage(
+        content="",
+        tool_calls=[{
+            "name": "generate_greeting",
+            "args": {"name": "friend", "style": style},
+            "id": call_id,
+            "type": "tool_call",
+        }],
+    )
+
+
 def _agent_reply(messages: list[Any]) -> AIMessage:
-    """Call the LLM and return its response."""
+    """Return a response from LiteLLM or deterministic fallback."""
+    if not _litellm_enabled():
+        return _deterministic_reply(messages)
+
     bound_model = _get_bound_model()
     result = bound_model.invoke(_to_model_messages(messages))
     if isinstance(result, AIMessage):
@@ -232,6 +359,7 @@ def greeter(state: dict, runtime: Runtime[Any]) -> dict:
     """A simple node that greets the user and may call mock tools."""
     messages = state.get("messages", [])
     memory: dict[str, Any] = {}
+    message_history: list[Any] = []
     store = runtime.store
     namespace = _memory_namespace(runtime)
 
@@ -239,9 +367,14 @@ def greeter(state: dict, runtime: Runtime[Any]) -> dict:
         existing = store.get(namespace, MEMORY_KEY, refresh_ttl=False)
         if existing is not None and isinstance(existing.value, dict):
             memory = dict(existing.value)
+        existing_messages = store.get(namespace, MESSAGE_HISTORY_KEY, refresh_ttl=False)
+        if existing_messages is not None and isinstance(existing_messages.value, list):
+            message_history = list(existing_messages.value)
 
-    user_text = _last_user_text(messages)
-    response_messages = _respond_with_optional_tool_calls(messages)
+    all_input_messages = _merge_message_history(message_history, messages)
+    user_text = _last_user_text(all_input_messages)
+    response_messages = _respond_with_optional_tool_calls(all_input_messages)
+    all_messages = [*all_input_messages, *response_messages]
 
     turn_count = int(memory.get("turn_count", 0))
     recent_user_messages = list(memory.get("recent_user_messages", []))
@@ -257,9 +390,10 @@ def greeter(state: dict, runtime: Runtime[Any]) -> dict:
     }
     if store is not None:
         store.put(namespace, MEMORY_KEY, memory_update)
+        store.put(namespace, MESSAGE_HISTORY_KEY, all_messages)
 
     return {
-        "messages": response_messages,
+        "messages": all_messages,
     }
 
 

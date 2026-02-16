@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from rich.text import Text
 from textual.widgets import RichLog
@@ -23,6 +22,4 @@ class LogsPanel(RichLog):
         """Add a log entry."""
         ts = datetime.now().strftime("%H:%M:%S")
         style = _LEVEL_STYLES.get(level, "white")
-        self.write(
-            Text(f"[{ts}] [{level.upper()}] {message}", style=style)
-        )
+        self.write(Text(f"[{ts}] [{level.upper()}] {message}", style=style))

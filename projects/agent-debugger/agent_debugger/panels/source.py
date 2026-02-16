@@ -5,7 +5,6 @@ from __future__ import annotations
 import linecache
 from typing import Any
 
-from rich.syntax import Syntax
 from rich.text import Text
 from textual.widgets import RichLog
 
@@ -45,15 +44,11 @@ class SourcePanel(RichLog):
         lines = linecache.getlines(self._filename)
 
         if not lines:
-            self.write(
-                Text(f"Cannot read: {self._filename}", style="red")
-            )
+            self.write(Text(f"Cannot read: {self._filename}", style="red"))
             return
 
         # Show filename header
-        self.write(
-            Text(f"  {self._filename}", style="bold underline")
-        )
+        self.write(Text(f"  {self._filename}", style="bold underline"))
         self.write(Text(""))
 
         # Calculate window
@@ -80,9 +75,7 @@ class SourcePanel(RichLog):
             prefix = f" {bp_marker}{indicator}{line_num:5d} │ "
 
             if style:
-                self.write(
-                    Text(f"{prefix}{line_text}", style=style)
-                )
+                self.write(Text(f"{prefix}{line_text}", style=style))
             else:
                 self.write(Text(f"{prefix}{line_text}"))
 

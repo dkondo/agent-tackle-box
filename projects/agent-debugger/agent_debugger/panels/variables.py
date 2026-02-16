@@ -8,7 +8,6 @@ from typing import Any
 from rich.text import Text
 from textual.widgets import Static
 
-
 # Types to skip in variable display
 _SKIP_TYPES = (type, type(lambda: None), type(print))
 
@@ -69,9 +68,7 @@ class VariablesPanel(Static):
         # Show exception if present
         if "__exception__" in local_vars:
             exc = local_vars["__exception__"]
-            lines.append(
-                f"\n[bold red]Exception:[/bold red] {exc}"
-            )
+            lines.append(f"\n[bold red]Exception:[/bold red] {exc}")
 
         if len(lines) == 1:
             lines.append("  [dim](no locals)[/dim]")

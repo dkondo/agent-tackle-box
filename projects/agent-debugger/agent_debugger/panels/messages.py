@@ -32,10 +32,7 @@ class MessagesPanel(RichLog):
 
             if msg_type == "human":
                 user_count += 1
-                preview = (
-                    content if len(content) <= 40
-                    else f"{content[:37]}..."
-                )
+                preview = content if len(content) <= 40 else f"{content[:37]}..."
                 self.write(
                     Text(
                         f'Messages after user #{user_count}: "{preview}"',
@@ -52,18 +49,12 @@ class MessagesPanel(RichLog):
                             else getattr(tc, "name", "tool")
                         )
                         tc_args = (
-                            tc.get("args", {})
-                            if isinstance(tc, dict)
-                            else getattr(tc, "args", {})
+                            tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
                         )
-                        self.write(
-                            Text(f"> {tc_name}({tc_args})", style="dim")
-                        )
+                        self.write(Text(f"> {tc_name}({tc_args})", style="dim"))
                 elif content:
                     self.write(Text(content, style="cyan"))
             elif msg_type == "tool":
-                self.write(
-                    Text(f"  [{name}]: returned", style="yellow")
-                )
+                self.write(Text(f"  [{name}]: returned", style="yellow"))
             elif msg_type == "system":
                 self.write(Text("[system prompt]", style="dim red"))

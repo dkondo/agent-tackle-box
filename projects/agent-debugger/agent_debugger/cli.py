@@ -14,8 +14,8 @@ from agent_debugger.breakpoints import BreakpointManager
 from agent_debugger.extensions import (
     ChatOutputRenderer,
     MemoryRenderer,
-    StateRenderer,
     StateMutator,
+    StateRenderer,
     StoreRenderer,
     ToolRenderer,
 )
@@ -31,9 +31,7 @@ def _load_graph(graph_ref: str) -> Any:
         The graph object.
     """
     if ":" not in graph_ref:
-        raise click.BadParameter(
-            f"Graph reference must be 'module:attribute', got '{graph_ref}'"
-        )
+        raise click.BadParameter(f"Graph reference must be 'module:attribute', got '{graph_ref}'")
     module_path, attr_name = graph_ref.rsplit(":", 1)
 
     # Add cwd to sys.path so local modules can be found
@@ -44,16 +42,12 @@ def _load_graph(graph_ref: str) -> Any:
     try:
         module = importlib.import_module(module_path)
     except ModuleNotFoundError as e:
-        raise click.BadParameter(
-            f"Cannot import module '{module_path}': {e}"
-        ) from e
+        raise click.BadParameter(f"Cannot import module '{module_path}': {e}") from e
 
     try:
         graph = getattr(module, attr_name)
     except AttributeError as e:
-        raise click.BadParameter(
-            f"Module '{module_path}' has no attribute '{attr_name}'"
-        ) from e
+        raise click.BadParameter(f"Module '{module_path}' has no attribute '{attr_name}'") from e
 
     return graph
 
@@ -61,9 +55,7 @@ def _load_graph(graph_ref: str) -> Any:
 def _load_ref(ref: str, kind: str) -> Any:
     """Load an object from a module:attribute reference."""
     if ":" not in ref:
-        raise click.BadParameter(
-            f"{kind} reference must be 'module:attribute', got '{ref}'"
-        )
+        raise click.BadParameter(f"{kind} reference must be 'module:attribute', got '{ref}'")
     module_path, attr_name = ref.rsplit(":", 1)
     cwd = str(Path.cwd())
     if cwd not in sys.path:
@@ -71,9 +63,7 @@ def _load_ref(ref: str, kind: str) -> Any:
     try:
         module = importlib.import_module(module_path)
     except ModuleNotFoundError as e:
-        raise click.BadParameter(
-            f"Cannot import module '{module_path}' for {kind}: {e}"
-        ) from e
+        raise click.BadParameter(f"Cannot import module '{module_path}' for {kind}: {e}") from e
 
     try:
         return getattr(module, attr_name)
@@ -100,14 +90,11 @@ def _load_optional_extension(
         for method in required_methods:
             fn = getattr(obj, method, None)
             if not callable(fn):
-                raise TypeError(
-                    f"{kind} must define callable '{method}'"
-                )
+                raise TypeError(f"{kind} must define callable '{method}'")
         return obj
     except Exception as e:
         click.echo(
-            f"Warning: failed to load {kind} '{ref}': {e}. "
-            "Falling back to default behavior.",
+            f"Warning: failed to load {kind} '{ref}': {e}. Falling back to default behavior.",
             err=True,
         )
         return None
@@ -406,9 +393,7 @@ def run(
     if graph_attr:
         graph = namespace.get(graph_attr)
         if graph is None:
-            raise click.BadParameter(
-                f"Script has no variable '{graph_attr}'"
-            )
+            raise click.BadParameter(f"Script has no variable '{graph_attr}'")
     else:
         # Auto-detect: look for CompiledStateGraph instances
         from langgraph.graph.state import CompiledStateGraph
@@ -421,8 +406,7 @@ def run(
 
     if graph is None:
         raise click.UsageError(
-            "No CompiledStateGraph found in script. "
-            "Use --graph to specify the attribute name."
+            "No CompiledStateGraph found in script. Use --graph to specify the attribute name."
         )
 
     loaded_memory_renderer = _load_optional_extension(

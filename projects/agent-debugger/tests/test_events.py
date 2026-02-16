@@ -1,7 +1,6 @@
 """Tests for debug events."""
 
 import sys
-from types import FrameType
 
 from agent_debugger.events import (
     AgentErrorEvent,
@@ -78,9 +77,7 @@ class TestEvents:
         assert event.lineno > 0
 
     def test_agent_response_event(self):
-        event = AgentResponseEvent(
-            text="Hello!", payload={"recommendations": [1]}
-        )
+        event = AgentResponseEvent(text="Hello!", payload={"recommendations": [1]})
         assert event.text == "Hello!"
         assert event.payload["recommendations"] == [1]
 

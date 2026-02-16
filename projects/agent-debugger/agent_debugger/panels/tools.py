@@ -28,6 +28,7 @@ class ToolCallsPanel(RichLog):
     """Panel showing tool call history with args and results."""
 
     def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("auto_scroll", False)
         super().__init__(**kwargs)
         self._records: list[ToolCallRecord] = []
         self.custom_lines: list[str] | None = None
@@ -99,14 +100,29 @@ class ToolCallsPanel(RichLog):
                     self.write(Text.from_markup(text_line))
                 except Exception:
                     self.write(Text(text_line))
+            self.scroll_home(animate=False)
             return
 
         if not self._records:
             self.write(Text("No tool calls yet.", style="dim"))
             return
 
+        # Render by most recent turn first. Within a turn, show the most
+        # recently added calls first.
+        ordered_records = [
+            record
+            for _, record in sorted(
+                enumerate(self._records),
+                key=lambda item: (
+                    item[1].turn if item[1].turn is not None else -1,
+                    item[0],
+                ),
+                reverse=True,
+            )
+        ]
+
         current_turn: int | None = None
-        for i, tc in enumerate(self._records, 1):
+        for i, tc in enumerate(ordered_records, 1):
             if tc.turn is not None and tc.turn != current_turn:
                 current_turn = tc.turn
                 self.write(Text(f"Turn {current_turn}", style="bold yellow"))
@@ -124,9 +140,9 @@ class ToolCallsPanel(RichLog):
             if tc.error:
                 self.write(Text(f"    error: {tc.error}", style="red"))
             if tc.duration_ms > 0:
-                self.write(
-                    Text(f"    duration: {tc.duration_ms:.0f}ms", style="dim")
-                )
+                self.write(Text(f"    duration: {tc.duration_ms:.0f}ms", style="dim"))
+
+        self.scroll_home(animate=False)
 
     def clear_records(self) -> None:
         """Clear all tool call records."""

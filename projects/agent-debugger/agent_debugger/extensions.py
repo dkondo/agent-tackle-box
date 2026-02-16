@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Protocol
 
 
 @dataclass
@@ -45,27 +46,21 @@ class StateMutationResult:
 class MemoryRenderer(Protocol):
     """Optional renderer for custom memory display."""
 
-    def render_memory(
-        self, snapshot: Mapping[str, Any]
-    ) -> MemoryRenderModel | None:
+    def render_memory(self, snapshot: Mapping[str, Any]) -> MemoryRenderModel | None:
         """Render memory/store content from a generic snapshot."""
 
 
 class StoreRenderer(Protocol):
     """Optional renderer for backend store display."""
 
-    def render_store(
-        self, snapshot: Mapping[str, Any]
-    ) -> MemoryRenderModel | None:
+    def render_store(self, snapshot: Mapping[str, Any]) -> MemoryRenderModel | None:
         """Render backend store content from a generic snapshot."""
 
 
 class StateRenderer(Protocol):
     """Optional renderer for state panel display."""
 
-    def render_state(
-        self, snapshot: Mapping[str, Any]
-    ) -> StateRenderModel | None:
+    def render_state(self, snapshot: Mapping[str, Any]) -> StateRenderModel | None:
         """Render state content from a generic snapshot."""
 
 
@@ -87,9 +82,7 @@ class ChatOutputRenderer(Protocol):
 class ToolRenderer(Protocol):
     """Optional renderer for tools panel display."""
 
-    def render_tools(
-        self, snapshot: Mapping[str, Any]
-    ) -> ToolRenderModel | None:
+    def render_tools(self, snapshot: Mapping[str, Any]) -> ToolRenderModel | None:
         """Render tool call history from a generic snapshot."""
 
 

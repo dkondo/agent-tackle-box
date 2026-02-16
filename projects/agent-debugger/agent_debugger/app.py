@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
 from typing import Any
@@ -22,7 +21,6 @@ from textual.widgets import (
     Input,
     Label,
     RichLog,
-    Static,
     TabbedContent,
     TabPane,
 )
@@ -37,16 +35,15 @@ from agent_debugger.events import (
     NodeStartEvent,
     RunFinishedEvent,
     StateUpdateEvent,
-    StreamTokenEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
 from agent_debugger.extensions import (
     ChatOutputRenderer,
     MemoryRenderer,
-    StateRenderer,
-    StateMutator,
     StateMutationResult,
+    StateMutator,
+    StateRenderer,
     StoreRenderer,
     ToolRenderer,
 )
@@ -247,9 +244,7 @@ class DebuggerApp(App):
                     classes="right-collapsible",
                     collapsed=False,
                 ):
-                    yield StatePanel(
-                        id="state-panel", classes="stacked-panel"
-                    )
+                    yield StatePanel(id="state-panel", classes="stacked-panel")
 
                 with Collapsible(
                     title="Variables",
@@ -257,9 +252,7 @@ class DebuggerApp(App):
                     classes="right-collapsible",
                     collapsed=True,
                 ):
-                    yield VariablesPanel(
-                        id="vars-panel", classes="stacked-panel"
-                    )
+                    yield VariablesPanel(id="vars-panel", classes="stacked-panel")
 
                 with Collapsible(
                     title="Stack",
@@ -267,33 +260,21 @@ class DebuggerApp(App):
                     classes="right-collapsible",
                     collapsed=True,
                 ):
-                    yield StackPanel(
-                        id="stack-panel", classes="stacked-panel"
-                    )
+                    yield StackPanel(id="stack-panel", classes="stacked-panel")
 
         with TabbedContent(id="bottom-tabs", initial="tools-tab"):
             with TabPane("Messages", id="messages-tab"):
-                yield MessagesPanel(
-                    id="messages-panel", highlight=True, markup=True
-                )
+                yield MessagesPanel(id="messages-panel", highlight=True, markup=True)
             with TabPane("Tools", id="tools-tab"):
-                yield ToolCallsPanel(
-                    id="tools-panel", highlight=True, markup=True
-                )
+                yield ToolCallsPanel(id="tools-panel", highlight=True, markup=True)
             with TabPane("Source", id="source-tab"):
-                yield SourcePanel(
-                    id="source-panel", highlight=True, markup=True
-                )
+                yield SourcePanel(id="source-panel", highlight=True, markup=True)
             with TabPane("Diff", id="diff-tab"):
-                yield DiffPanel(
-                    id="diff-panel", highlight=True, markup=True
-                )
+                yield DiffPanel(id="diff-panel", highlight=True, markup=True)
             with TabPane("Breakpoints", id="bp-tab"):
                 yield RichLog(id="bp-panel", highlight=True, markup=True)
             with TabPane("Logs", id="logs-tab"):
-                yield LogsPanel(
-                    id="logs-panel", highlight=True, markup=True
-                )
+                yield LogsPanel(id="logs-panel", highlight=True, markup=True)
 
         yield Footer()
 
@@ -305,9 +286,7 @@ class DebuggerApp(App):
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.write(Text("adb: Agent Debugger", style="bold cyan"))
-        chat_log.write(
-            Text("[Type /help for available commands]", style="dim")
-        )
+        chat_log.write(Text("[Type /help for available commands]", style="dim"))
         chat_log.write(Text("=" * 40, style="dim"))
         chat_log.write("")
 
@@ -349,13 +328,9 @@ class DebuggerApp(App):
         }
         normalized_input = user_input.lower()
         skip_history = normalized_input in _skip_history or (
-            self._at_breakpoint
-            and normalized_input in _breakpoint_debug_commands
+            self._at_breakpoint and normalized_input in _breakpoint_debug_commands
         )
-        if (
-            not skip_history
-            and (not self._input_history or self._input_history[-1] != user_input)
-        ):
+        if not skip_history and (not self._input_history or self._input_history[-1] != user_input):
             self._input_history.append(user_input)
             self._save_history()
         self._history_index = -1
@@ -445,11 +420,7 @@ class DebuggerApp(App):
         # Recovery path: if the worker has exited but RunFinished was not
         # processed (e.g., due a transient event handler failure), ensure
         # the UI does not remain stuck in "Thinking...".
-        if (
-            self._processing
-            and not self._at_breakpoint
-            and not self.runner.is_running
-        ):
+        if self._processing and not self._at_breakpoint and not self.runner.is_running:
             self._stop_spinner()
             self._processing = False
             self._resume_input()
@@ -470,9 +441,7 @@ class DebuggerApp(App):
 
         elif isinstance(event, NodeEndEvent):
             if event.error:
-                self._log(
-                    f"Node error: {event.node}: {event.error}", "error"
-                )
+                self._log(f"Node error: {event.node}: {event.error}", "error")
             else:
                 self._log(
                     f"Node ended: {event.node} (step {event.step})",
@@ -511,16 +480,12 @@ class DebuggerApp(App):
             # Update messages panel
             messages = event.values.get("messages", [])
             if messages:
-                msg_panel = self.query_one(
-                    "#messages-panel", MessagesPanel
-                )
+                msg_panel = self.query_one("#messages-panel", MessagesPanel)
                 msg_panel.update_messages(messages)
 
             # Update diff panel
             diff_panel = self.query_one("#diff-panel", DiffPanel)
-            diff_panel.update_diff(
-                self._previous_state, event.values
-            )
+            diff_panel.update_diff(self._previous_state, event.values)
             self._update_store_panel(event)
             self._maybe_auto_expand_store(event.store_items)
 
@@ -538,10 +503,7 @@ class DebuggerApp(App):
                     self._start_spinner()
                 self._resume_input()
                 self._log(
-                    (
-                        "Failed to handle breakpoint UI; "
-                        f"auto-continued execution: {e}"
-                    ),
+                    (f"Failed to handle breakpoint UI; auto-continued execution: {e}"),
                     "error",
                 )
 
@@ -560,9 +522,7 @@ class DebuggerApp(App):
         elif isinstance(event, AgentErrorEvent):
             chat_log = self.query_one("#chat-log", ChatLog)
             chat_log.write("")
-            chat_log.write(
-                Text(f"Error: {event.message}", style="bold red")
-            )
+            chat_log.write(Text(f"Error: {event.message}", style="bold red"))
             self._log(f"Agent error: {event.message}", "error")
 
         elif isinstance(event, RunFinishedEvent):
@@ -595,14 +555,9 @@ class DebuggerApp(App):
         source_panel = self.query_one("#source-panel", SourcePanel)
         bp_lines = set()
         for bp in self.bp_manager.breakpoints:
-            if (
-                bp.filename == event.filename
-                and bp.lineno is not None
-            ):
+            if bp.filename == event.filename and bp.lineno is not None:
                 bp_lines.add(bp.lineno)
-        source_panel.show_source(
-            event.filename, event.lineno, bp_lines
-        )
+        source_panel.show_source(event.filename, event.lineno, bp_lines)
 
         # Auto-switch to source tab
         tabs = self.query_one("#bottom-tabs", TabbedContent)
@@ -661,9 +616,7 @@ class DebuggerApp(App):
             default=str,
         )
 
-    def _render_custom_chat_output(
-        self, event: AgentResponseEvent, chat_log: ChatLog
-    ) -> bool:
+    def _render_custom_chat_output(self, event: AgentResponseEvent, chat_log: ChatLog) -> bool:
         """Render chat output through an optional renderer."""
         renderer = self.output_renderer
         if renderer is None:
@@ -729,6 +682,14 @@ class DebuggerApp(App):
             return
 
         records = panel.records
+        # Sort most-recent turn first; within a turn, most-recent call first.
+        ordered = sorted(
+            enumerate(records),
+            key=lambda item: (
+                -(item[1].turn if item[1].turn is not None else -1),
+                -item[0],
+            ),
+        )
         snapshot = {
             "tool_calls": [
                 {
@@ -742,7 +703,7 @@ class DebuggerApp(App):
                     "step": rec.step,
                     "turn": rec.turn,
                 }
-                for rec in records
+                for _, rec in ordered
             ],
             "state": self._current_state,
             "turn": self._turn_counter,
@@ -812,9 +773,7 @@ class DebuggerApp(App):
             error=event.store_error,
         )
 
-    def _normalize_lines(
-        self, model: Any
-    ) -> list[str] | None:
+    def _normalize_lines(self, model: Any) -> list[str] | None:
         """Coerce renderer output to string lines."""
         if model is None:
             return None
@@ -825,24 +784,18 @@ class DebuggerApp(App):
             return [str(line) for line in lines]
         return None
 
-    def _has_visible_store(
-        self, store_items: dict[str, dict[str, Any]]
-    ) -> bool:
+    def _has_visible_store(self, store_items: dict[str, dict[str, Any]]) -> bool:
         """Whether backend store currently has entries."""
         if not store_items:
             return False
         return any(bool(entries) for entries in store_items.values())
 
-    def _maybe_auto_expand_store(
-        self, store_items: dict[str, dict[str, Any]]
-    ) -> None:
+    def _maybe_auto_expand_store(self, store_items: dict[str, dict[str, Any]]) -> None:
         """Auto-expand Store when backend store data first appears."""
         has_store = self._has_visible_store(store_items)
         if has_store and not self._last_store_had_data:
             try:
-                store_collapsible = self.query_one(
-                    "#store-collapsible", Collapsible
-                )
+                store_collapsible = self.query_one("#store-collapsible", Collapsible)
                 store_collapsible.collapsed = False
             except Exception as e:
                 self._log(f"Failed to auto-expand store panel: {e}", "warning")
@@ -855,9 +808,7 @@ class DebuggerApp(App):
         if not has_store:
             return
         try:
-            store_collapsible = self.query_one(
-                "#store-collapsible", Collapsible
-            )
+            store_collapsible = self.query_one("#store-collapsible", Collapsible)
             store_collapsible.collapsed = False
         except Exception as e:
             self._log(f"Failed to keep store panel visible: {e}", "warning")
@@ -879,17 +830,12 @@ class DebuggerApp(App):
         self._stop_spinner()
         self._processing = False
 
-    def _apply_state_mutation(
-        self, mutation: str, args: list[str]
-    ) -> StateMutationResult:
+    def _apply_state_mutation(self, mutation: str, args: list[str]) -> StateMutationResult:
         """Apply a generic state mutation via mutator when configured."""
         if self.state_mutator is None:
             return StateMutationResult(
                 applied=False,
-                message=(
-                    "State mutator is not configured; "
-                    "only local clear was applied."
-                ),
+                message=("State mutator is not configured; only local clear was applied."),
             )
 
         try:
@@ -947,9 +893,7 @@ class DebuggerApp(App):
             if inp.disabled:
                 return  # At breakpoint, placeholder is set by _handle_breakpoint
             if self.bp_manager.breakpoints:
-                inp.placeholder = (
-                    "Enter message, /command, or when breakpoints active: c/n/s/r"
-                )
+                inp.placeholder = "Enter message, /command, or when breakpoints active: c/n/s/r"
             else:
                 inp.placeholder = "Enter message or /command..."
         except Exception as e:
@@ -1001,12 +945,8 @@ class DebuggerApp(App):
 
         # Collapse debug panels
         try:
-            self.query_one(
-                "#vars-collapsible", Collapsible
-            ).collapsed = True
-            self.query_one(
-                "#stack-collapsible", Collapsible
-            ).collapsed = True
+            self.query_one("#vars-collapsible", Collapsible).collapsed = True
+            self.query_one("#stack-collapsible", Collapsible).collapsed = True
         except Exception as e:
             self._log(f"Failed to collapse debug panels: {e}", "warning")
 
@@ -1058,33 +998,25 @@ class DebuggerApp(App):
             if self._at_breakpoint:
                 self.action_continue_exec()
             else:
-                chat_log.write(
-                    Text("Not at a breakpoint.", style="yellow")
-                )
+                chat_log.write(Text("Not at a breakpoint.", style="yellow"))
 
         elif command in ("/n", "/next"):
             if self._at_breakpoint:
                 self.action_step_over()
             else:
-                chat_log.write(
-                    Text("Not at a breakpoint.", style="yellow")
-                )
+                chat_log.write(Text("Not at a breakpoint.", style="yellow"))
 
         elif command in ("/s", "/step"):
             if self._at_breakpoint:
                 self.action_step_into()
             else:
-                chat_log.write(
-                    Text("Not at a breakpoint.", style="yellow")
-                )
+                chat_log.write(Text("Not at a breakpoint.", style="yellow"))
 
         elif command in ("/r", "/return"):
             if self._at_breakpoint:
                 self.action_step_out()
             else:
-                chat_log.write(
-                    Text("Not at a breakpoint.", style="yellow")
-                )
+                chat_log.write(Text("Not at a breakpoint.", style="yellow"))
 
         elif command in ("/q", "/quit"):
             self.action_quit()
@@ -1103,15 +1035,11 @@ class DebuggerApp(App):
 
             if bp_type == "node" and name:
                 available_nodes = self._available_graph_nodes()
-                if (
-                    available_nodes is not None
-                    and name not in available_nodes
-                ):
+                if available_nodes is not None and name not in available_nodes:
                     available = ", ".join(sorted(available_nodes))
                     chat_log.write(
                         Text(
-                            f"Error: node '{name}' does not exist. "
-                            f"Available nodes: {available}",
+                            f"Error: node '{name}' does not exist. Available nodes: {available}",
                             style="red",
                         )
                     )
@@ -1121,24 +1049,16 @@ class DebuggerApp(App):
                     )
                     return
                 bp = self.bp_manager.add_node(name)
-                chat_log.write(
-                    Text(f"Breakpoint set: {bp}", style="green")
-                )
+                chat_log.write(Text(f"Breakpoint set: {bp}", style="green"))
             elif bp_type == "tool" and name:
                 bp = self.bp_manager.add_tool(name)
-                chat_log.write(
-                    Text(f"Breakpoint set: {bp}", style="green")
-                )
+                chat_log.write(Text(f"Breakpoint set: {bp}", style="green"))
             elif bp_type == "state" and name:
                 bp = self.bp_manager.add_state(name)
-                chat_log.write(
-                    Text(f"Breakpoint set: {bp}", style="green")
-                )
+                chat_log.write(Text(f"Breakpoint set: {bp}", style="green"))
             elif bp_type == "transition":
                 bp = self.bp_manager.add_transition()
-                chat_log.write(
-                    Text(f"Breakpoint set: {bp}", style="green")
-                )
+                chat_log.write(Text(f"Breakpoint set: {bp}", style="green"))
             elif bp_type == "line" and name:
                 # Parse file:line format
                 if ":" in name:
@@ -1218,27 +1138,20 @@ class DebuggerApp(App):
                     )
                 )
                 if mutation not in {"local", ""}:
-                    result = self._apply_state_mutation(
-                        mutation, mutation_args
-                    )
+                    result = self._apply_state_mutation(mutation, mutation_args)
                     if result.applied:
                         chat_log.write(
                             Text(
-                                result.message
-                                or f"Applied mutation '{mutation}'.",
+                                result.message or f"Applied mutation '{mutation}'.",
                                 style="green",
                             )
                         )
                     elif result.message:
-                        chat_log.write(
-                            Text(result.message, style="yellow")
-                        )
+                        chat_log.write(Text(result.message, style="yellow"))
 
         elif command == "/state":
             self._update_state_panel(self._current_state)
-            store_items, store_source, store_error = (
-                self.runner.get_store_snapshot()
-            )
+            store_items, store_source, store_error = self.runner.get_store_snapshot()
             self._update_store_panel(
                 StateUpdateEvent(
                     values=self._current_state,
@@ -1250,9 +1163,7 @@ class DebuggerApp(App):
             chat_log.write(Text("State refreshed.", style="green"))
 
         elif command == "/store":
-            store_items, store_source, store_error = (
-                self.runner.get_store_snapshot()
-            )
+            store_items, store_source, store_error = self.runner.get_store_snapshot()
             self._update_store_panel(
                 StateUpdateEvent(
                     values=self._current_state,
@@ -1283,14 +1194,10 @@ class DebuggerApp(App):
             start = len(self._input_history) - len(entries) + 1
             chat_log.write(Text("Recent history:", style="bold"))
             for idx, entry in enumerate(entries, start=start):
-                chat_log.write(
-                    Text(f"  {idx}. {entry}", style="cyan")
-                )
+                chat_log.write(Text(f"  {idx}. {entry}", style="cyan"))
 
         else:
-            chat_log.write(
-                Text(f"Unknown command: {command}", style="red")
-            )
+            chat_log.write(Text(f"Unknown command: {command}", style="red"))
 
     def _show_help(self) -> None:
         """Show help text."""
@@ -1363,20 +1270,14 @@ class DebuggerApp(App):
         """Start the thinking spinner."""
         self._spinner_frame = 0
         if self._spinner_timer is None:
-            self._spinner_timer = self.set_interval(
-                0.1, self._update_spinner
-            )
+            self._spinner_timer = self.set_interval(0.1, self._update_spinner)
 
     def _update_spinner(self) -> None:
         """Update the spinner animation."""
-        self._spinner_frame = (self._spinner_frame + 1) % len(
-            SPINNER_FRAMES
-        )
+        self._spinner_frame = (self._spinner_frame + 1) % len(SPINNER_FRAMES)
         try:
             label = self.query_one("#spinner-label", Label)
-            label.update(
-                f"{SPINNER_FRAMES[self._spinner_frame]} Thinking..."
-            )
+            label.update(f"{SPINNER_FRAMES[self._spinner_frame]} Thinking...")
         except Exception as e:
             self._log(f"Failed to update spinner: {e}", "debug")
 
@@ -1399,7 +1300,7 @@ class DebuggerApp(App):
         except Exception as e:
             import sys
 
-            print(f"[adb] log panel unavailable: {e}", file=sys.stderr)
+            print(f"[adb] log panel unavailable: {e}", file=sys.stderr)  # noqa: T201
 
     def _load_history(self) -> None:
         """Load input history from disk."""
@@ -1468,9 +1369,7 @@ class DebuggerApp(App):
             self._log("Press C-c again to quit", "warning")
             try:
                 chat_log = self.query_one("#chat-log", ChatLog)
-                chat_log.write(
-                    Text("Press C-c again to quit.", style="yellow")
-                )
+                chat_log.write(Text("Press C-c again to quit.", style="yellow"))
             except Exception as e:
                 self._log(f"Failed to write Ctrl-C hint: {e}", "warning")
 

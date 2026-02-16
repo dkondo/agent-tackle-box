@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 _TYPE_ALIASES = {
     "assistant": "ai",
     "user": "human",
@@ -17,9 +16,7 @@ def message_type(msg: Any) -> str:
     if isinstance(msg, dict):
         raw = str(msg.get("type") or msg.get("role") or "")
     else:
-        raw = str(
-            getattr(msg, "type", "") or getattr(msg, "role", "")
-        )
+        raw = str(getattr(msg, "type", "") or getattr(msg, "role", ""))
     raw = raw.lower()
     if not raw:
         return "unknown"

@@ -1,0 +1,51 @@
+name: lint
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        description: "From which folder this pipeline executes"
+
+env:
+  UV_FROZEN: "true"
+
+  # This env var allows us to get inline annotations when ruff has complaints.
+  RUFF_OUTPUT_FORMAT: github
+
+jobs:
+  build:
+    name: "make lint"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.12"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }} + uv
+        uses: "./.github/actions/uv_setup"
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          uv sync --group lint --group typing
+
+      - name: Lint package code
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          make lint_package
+
+      - name: Install test dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          uv sync --inexact --group test
+
+      - name: Lint tests
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          make lint_tests

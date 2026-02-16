@@ -71,9 +71,7 @@ class StackPanel(Static):
 
         # Show frames with most recent first, limit depth
         max_frames = 15
-        for i, (filename, lineno, func_name) in enumerate(
-            self._frames[:max_frames]
-        ):
+        for i, (filename, lineno, func_name) in enumerate(self._frames[:max_frames]):
             if i == 0:
                 marker = "►"
                 style = "bold white"
@@ -81,14 +79,9 @@ class StackPanel(Static):
                 marker = " "
                 style = "dim"
 
-            lines.append(
-                f"  {marker} [{style}]{func_name}[/{style}]"
-                f" ({filename}:{lineno})"
-            )
+            lines.append(f"  {marker} [{style}]{func_name}[/{style}] ({filename}:{lineno})")
 
         if len(self._frames) > max_frames:
-            lines.append(
-                f"  ... {len(self._frames) - max_frames} more frames"
-            )
+            lines.append(f"  ... {len(self._frames) - max_frames} more frames")
 
         self.update(Text.from_markup("\n".join(lines)))
