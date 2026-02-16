@@ -154,6 +154,18 @@ def _run_app(
     app.run()
 
 
+def _load_env_file(env_file: str) -> None:
+    """Load environment variables from a dotenv file if it exists."""
+    path = Path(env_file)
+    if not path.is_file():
+        if env_file != ".env":
+            click.echo(f"Warning: env file '{env_file}' not found.", err=True)
+        return
+    from dotenv import load_dotenv
+
+    load_dotenv(path, override=True)
+
+
 def _parse_store_prefix(raw: str | None) -> tuple[str, ...] | None:
     """Parse comma-delimited store namespace prefix."""
     if not raw:
@@ -172,6 +184,12 @@ def main() -> None:
 
 @main.command()
 @click.argument("graph_ref")
+@click.option(
+    "--env-file",
+    default=".env",
+    show_default=True,
+    help="Path to a dotenv file to load before starting.",
+)
 @click.option(
     "--thread-id",
     "-t",
@@ -231,6 +249,7 @@ def main() -> None:
 )
 def attach(
     graph_ref: str,
+    env_file: str,
     thread_id: str | None,
     store_renderer: str | None,
     state_renderer: str | None,
@@ -246,6 +265,7 @@ def attach(
 
     GRAPH_REF is a module:attribute reference, e.g. 'my_agent:graph'.
     """
+    _load_env_file(env_file)
     graph = _load_graph(graph_ref)
     loaded_store_renderer = _load_optional_extension(
         store_renderer,
@@ -300,6 +320,12 @@ def attach(
     "graph_attr",
     default=None,
     help="Attribute name of the graph in the script (default: auto-detect).",
+)
+@click.option(
+    "--env-file",
+    default=".env",
+    show_default=True,
+    help="Path to a dotenv file to load before starting.",
 )
 @click.option(
     "--thread-id",
@@ -361,6 +387,7 @@ def attach(
 def run(
     script: str,
     graph_attr: str | None,
+    env_file: str,
     thread_id: str | None,
     store_renderer: str | None,
     state_renderer: str | None,
@@ -376,6 +403,7 @@ def run(
 
     SCRIPT is a Python file containing a CompiledStateGraph.
     """
+    _load_env_file(env_file)
     script_path = Path(script).resolve()
 
     # Add script's directory to sys.path
