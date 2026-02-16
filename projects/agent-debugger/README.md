@@ -1,4 +1,4 @@
-# adb: Agent Debugger for LangChain/LangGraph
+# adb: Agent Debugger
 
 A terminal UI debugger that combines application-level agent inspection (state, memory, tool calls, messages) with Python-level debugging (breakpoints, stepping, variable inspection).
 
