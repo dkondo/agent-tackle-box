@@ -6,11 +6,29 @@ Pushing to `main` triggers the `check_diffs.yml` workflow which runs lint and te
 
 ## Publishing to PyPI
 
-Publishing is triggered by pushing a version tag:
+Publishing is triggered by pushing a version tag.
+
+**Important:** Bump `version` in `pyproject.toml` before tagging. PyPI rejects uploads if a wheel with the same filename already exists, and the filename includes the version number.
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+# 1. Bump version in pyproject.toml
+# 2. Commit the version bump
+git add projects/agent-debugger/pyproject.toml
+git commit -m "Bump version to 0.1.2"
+
+# 3. Tag and push
+git tag v0.1.2
+git push origin main v0.1.2
+```
+
+If you tagged without bumping the version, delete and re-push the tag after fixing:
+
+```bash
+git tag -d v0.1.2
+git push origin :refs/tags/v0.1.2
+# bump version, commit, then re-tag
+git tag v0.1.2
+git push origin main v0.1.2
 ```
 
 The `release.yml` workflow will:
