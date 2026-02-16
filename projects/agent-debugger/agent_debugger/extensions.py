@@ -92,5 +92,20 @@ class StateMutator(Protocol):
         """Apply a named mutation against the graph state."""
 
 
+class InputProvider(Protocol):
+    """Optional provider for customizing graph input state."""
+
+    def build_input(self, message: str) -> dict[str, Any]:
+        """Build the input dict for graph.stream().
+
+        Args:
+            message: The user's chat message text.
+
+        Returns:
+            A dict to pass as input_data to graph.stream().
+            Must include a "messages" key.
+        """
+
+
 # Backward-compatibility alias.
 StateMutationProvider = StateMutator

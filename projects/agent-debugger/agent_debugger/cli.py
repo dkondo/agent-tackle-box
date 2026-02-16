@@ -13,6 +13,7 @@ import click
 from agent_debugger.breakpoints import BreakpointManager
 from agent_debugger.extensions import (
     ChatOutputRenderer,
+    InputProvider,
     StateMutator,
     StateRenderer,
     StoreRenderer,
@@ -108,6 +109,7 @@ def _run_app(
     tool_renderer: ToolRenderer | None = None,
     state_mutator: StateMutator | None = None,
     state_mutation_provider: StateMutator | None = None,
+    input_provider: InputProvider | None = None,
     store_prefix: tuple[str, ...] | None = None,
     store_max_namespaces: int = 20,
     store_items_per_namespace: int = 20,
@@ -128,6 +130,7 @@ def _run_app(
         store_namespace_prefix=store_prefix,
         store_max_namespaces=store_max_namespaces,
         store_items_per_namespace=store_items_per_namespace,
+        input_provider=input_provider,
     )
 
     if thread_id:
@@ -202,6 +205,11 @@ def main() -> None:
     help="Optional state mutator (module:Class).",
 )
 @click.option(
+    "--input-provider",
+    default=None,
+    help="Optional input provider (module:Class).",
+)
+@click.option(
     "--store-prefix",
     default=None,
     help="Optional backend store namespace prefix (comma-separated).",
@@ -228,6 +236,7 @@ def attach(
     output_renderer: str | None,
     tool_renderer: str | None,
     state_mutator: str | None,
+    input_provider: str | None,
     store_prefix: str | None,
     store_max_namespaces: int,
     store_items_per_namespace: int,
@@ -262,6 +271,11 @@ def attach(
         kind="state mutator",
         required_methods=("mutate_state",),
     )
+    loaded_input_provider = _load_optional_extension(
+        input_provider,
+        kind="input provider",
+        required_methods=("build_input",),
+    )
     _run_app(
         graph,
         thread_id=thread_id,
@@ -270,6 +284,7 @@ def attach(
         output_renderer=loaded_output_renderer,
         tool_renderer=loaded_tool_renderer,
         state_mutator=loaded_state_mutator,
+        input_provider=loaded_input_provider,
         store_prefix=_parse_store_prefix(store_prefix),
         store_max_namespaces=max(1, store_max_namespaces),
         store_items_per_namespace=max(1, store_items_per_namespace),
@@ -319,6 +334,11 @@ def attach(
     help="Optional state mutator (module:Class).",
 )
 @click.option(
+    "--input-provider",
+    default=None,
+    help="Optional input provider (module:Class).",
+)
+@click.option(
     "--store-prefix",
     default=None,
     help="Optional backend store namespace prefix (comma-separated).",
@@ -346,6 +366,7 @@ def run(
     output_renderer: str | None,
     tool_renderer: str | None,
     state_mutator: str | None,
+    input_provider: str | None,
     store_prefix: str | None,
     store_max_namespaces: int,
     store_items_per_namespace: int,
@@ -413,6 +434,11 @@ def run(
         kind="state mutator",
         required_methods=("mutate_state",),
     )
+    loaded_input_provider = _load_optional_extension(
+        input_provider,
+        kind="input provider",
+        required_methods=("build_input",),
+    )
     _run_app(
         graph,
         thread_id=thread_id,
@@ -421,6 +447,7 @@ def run(
         output_renderer=loaded_output_renderer,
         tool_renderer=loaded_tool_renderer,
         state_mutator=loaded_state_mutator,
+        input_provider=loaded_input_provider,
         store_prefix=_parse_store_prefix(store_prefix),
         store_max_namespaces=max(1, store_max_namespaces),
         store_items_per_namespace=max(1, store_items_per_namespace),

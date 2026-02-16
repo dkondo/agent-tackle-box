@@ -47,11 +47,13 @@ class AgentRunner:
         store_namespace_prefix: tuple[str, ...] | None = None,
         store_max_namespaces: int = 20,
         store_items_per_namespace: int = 20,
+        input_provider: Any | None = None,
     ) -> None:
         self.graph = graph
         self.event_queue = event_queue
         self.command_queue = command_queue
         self.bp_manager = bp_manager
+        self._input_provider = input_provider
         self.tracer = AgentTracer(
             event_queue=event_queue,
             command_queue=command_queue,
@@ -109,9 +111,10 @@ class AgentRunner:
         self._last_state_signature = None
         self._last_state_for_breakpoints = {}
 
-        input_data: dict[str, Any] = {
-            "messages": [{"role": "human", "content": message}],
-        }
+        if self._input_provider is not None:
+            input_data = self._input_provider.build_input(message)
+        else:
+            input_data = {"messages": [{"role": "human", "content": message}]}
         config = self._build_runtime_config(include_callbacks=True)
 
         try:

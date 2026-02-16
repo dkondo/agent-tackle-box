@@ -39,6 +39,14 @@ class DummyStateMutator:
         return None
 
 
+class DummyInputProvider:
+    def build_input(self, message):
+        return {
+            "messages": [{"role": "human", "content": message}],
+            "extra_field": "test",
+        }
+
+
 def _install_fake_compiled_state_graph(monkeypatch):
     """Install a minimal langgraph.graph.state module for CLI tests."""
     langgraph_mod = types.ModuleType("langgraph")
@@ -294,3 +302,28 @@ def test_run_errors_for_non_graph_script(monkeypatch):
         assert "No CompiledStateGraph found in script" in result.output
     finally:
         script.unlink(missing_ok=True)
+
+
+def test_attach_loads_input_provider(monkeypatch):
+    """attach should load --input-provider and forward it to _run_app."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_app(graph, thread_id=None, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli, "_load_graph", lambda _: object())
+    monkeypatch.setattr(cli, "_run_app", _fake_run_app)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "attach",
+            "dummy.module:graph",
+            "--input-provider",
+            "tests.test_cli:DummyInputProvider",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert isinstance(captured["input_provider"], DummyInputProvider)
