@@ -6,7 +6,7 @@ A TUI debugger that combines application-level agent inspection (state, memory, 
 
 An agent developer needs to answer two kinds of questions simultaneously:
 
-1. **Application-level**: "Which node ran? What tool was called? What did the LLM return? How did state change?"
+1. **Application-level**: "Which node ran? What tool was called? How did state change?"
     
 2. **Code-level**: "Why did this node produce that output? What's in the local variables at line 42? Why did the conditional branch go left?"
     
