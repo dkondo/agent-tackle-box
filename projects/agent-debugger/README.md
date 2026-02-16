@@ -10,7 +10,9 @@ An agent developer needs to answer two kinds of questions simultaneously:
     
 2. **Code-level**: "Why did this node produce that output? What's in the local variables at line 42? Why did the conditional branch go left?"
     
-When you stop at a breakpoint inside a node, you want to see _both_ the Python locals _and_ the graph-level context (which node, what triggered it, the full agent state). A combined debugger makes "zoom in / zoom out" seamless
+When you stop at a breakpoint inside a node, you want to see _both_ the Python locals _and_ the graph-level context (which node, what triggered it, the full agent state). 
+
+A combined debugger makes "zoom in / zoom out" seamless
 
 ## Quick Start
 
