@@ -168,15 +168,19 @@ class AgentRunner:
                         self._emit_agent_response(last)
 
         elif mode == "updates":
-            # Extract AI response from node output updates too.
+            # Extract AI response from the last message in each node
+            # output.  Only checking the final message avoids re-emitting
+            # historical responses when a node returns the full message
+            # history (e.g. simple_agent.greeter).
             if isinstance(data, dict):
                 for _, node_output in data.items():
                     if not isinstance(node_output, dict):
                         continue
-                    for msg in node_output.get("messages", []):
-                        msg_type = message_type(msg)
-                        if msg_type == "ai":
-                            self._emit_agent_response(msg)
+                    msgs = node_output.get("messages", [])
+                    if msgs:
+                        last = msgs[-1]
+                        if message_type(last) == "ai":
+                            self._emit_agent_response(last)
 
     def _extract_tool_info(self, values: dict[str, Any]) -> None:
         """Extract tool calls and results from state messages.
