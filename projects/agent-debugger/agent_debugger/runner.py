@@ -101,9 +101,11 @@ class AgentRunner:
         """
         self.tracer.reset_step()
         self._run_count += 1
-        self._seen_tool_calls = set()
-        self._seen_tool_results = set()
-        self._seen_responses = set()
+        # NOTE: _seen_tool_calls, _seen_tool_results, and _seen_responses
+        # are intentionally NOT cleared between invocations.  The full
+        # message history is re-scanned on each stream chunk, and resetting
+        # these sets would cause historical tool calls / responses to be
+        # re-emitted to the UI on every turn.
         self._last_state_signature = None
         self._last_state_for_breakpoints = {}
 
