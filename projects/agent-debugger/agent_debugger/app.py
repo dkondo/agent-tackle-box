@@ -87,7 +87,7 @@ class ChatLog(RichLog):
         shrink: bool = True,
         scroll_end: bool | None = None,
         animate: bool = False,
-    ) -> "ChatLog":
+    ) -> ChatLog:
         """Write content, forcing wrap to container width.
 
         When ``wrap`` is enabled and no explicit width is given, this
