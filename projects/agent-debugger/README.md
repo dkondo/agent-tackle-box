@@ -12,7 +12,13 @@ An agent developer needs to answer two kinds of questions simultaneously:
     
 When you stop at a breakpoint inside a node, you want to see _both_ the Python locals _and_ the graph-level context (which node, what triggered it, the full agent state). 
 
-A combined debugger makes "zoom in / zoom out" seamless
+The combined debugger `adb` makes "zoom in / zoom out" seamless
+
+Also, adb enables generative debugging by providing interfaces and hooks for custom rendering of state, store, and chat output, and custom specification of inputs and state mutation.
+
+The debugger is agent agnostic.  The engineering design is based agent's event stream, and it extends Python’s standard-library debugger class (`Bdb`) .
+
+The tool is released on pypi as agent-debugger.
 
 ## Quick Start
 
