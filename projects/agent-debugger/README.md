@@ -10,7 +10,7 @@ A terminal UI debugger that combines application-level agent inspection (state, 
 - **Code-level debugging**: Set breakpoints, step through code, inspect variables
 - **Agent-level breakpoints**: Break on node start, tool call, or state change
 - **Optional renderers/providers**:  Interfaces to render custom state, store, tools, chat output, and state mutation
-- ** Drop-in breakpoints **: Drop into the debugger from anywhere in your agent code with `breakpoint()` statement
+- **Drop-in breakpoints**: Drop into the debugger from anywhere in your agent code with `breakpoint()` statement
 
 ## Motivation
 
