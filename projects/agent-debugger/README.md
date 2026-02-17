@@ -4,6 +4,14 @@ A terminal UI debugger that combines application-level agent inspection (state, 
 
 <img width="1679" height="1016" alt="image" src="https://github.com/user-attachments/assets/85f77ac9-45fc-4b66-ade9-bf79d148aa56" />
 
+## Features
+
+- **Application-level debugging**: See agent state, messages, tool calls, state diffs
+- **Code-level debugging**: Set breakpoints, step through code, inspect variables
+- **Agent-level breakpoints**: Break on node start, tool call, or state change
+- **Optional renderers/providers**:  Hooks to render custom state, store, tools, chat output, and state mutation
+- **`import agent_debugger as adb; adb.set_trace()`**: Drop into the debugger from anywhere in your agent code
+
 ## Motivation
 
 An agent developer needs to answer two kinds of questions simultaneously:
@@ -74,15 +82,6 @@ USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/s
   --tool-renderer examples.simple_extensions:SimpleToolRenderer \
   --state-mutator examples.simple_extensions:SimpleStateMutator
 ```
-
-## Features
-
-- **Application-level debugging**: See agent state, messages, tool calls, state diffs
-- **Code-level debugging**: Set breakpoints, step through code, inspect variables
-- **Agent-level breakpoints**: Break on node start, tool call, or state change
-- **Optional renderers/providers**: Custom state, store, tools, chat output, and state mutation hooks
-- **Persistent tool history**: Tool calls are kept across turns in the Tools pane and grouped by turn
-- **`import agent_debugger as adb; adb.set_trace()`**: Drop into the debugger from anywhere in your agent code
 
 ## Usage
 
