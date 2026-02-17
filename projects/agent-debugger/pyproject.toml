@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-debugger"
-version = "0.1.5"
+version = "0.1.6"
 description = "Agent Debugger for LangChain/LangGraph"
 license = { text = "MIT" }
 readme = "README.md"
