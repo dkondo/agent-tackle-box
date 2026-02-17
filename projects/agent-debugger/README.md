@@ -18,7 +18,7 @@ The combined debugger `adb` makes "zoom in / zoom out" seamless
 
 Also, `adb` enables **generative debugging** by providing interfaces and hooks for custom rendering of state, store, and chat output, and custom specification of inputs and state mutation.
 
-The debugger is agent agnostic.  The engineering design is based agent's event stream, and it extends Python’s standard-library debugger class (`Bdb`) .
+The debugger is agent agnostic.  The engineering design is based on an agent's event stream, and it extends Python’s standard-library debugger class (`Bdb`) .
 
 The tool is released on pypi as `agent-debugger`.
 
