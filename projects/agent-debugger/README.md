@@ -6,11 +6,11 @@ A terminal UI debugger that combines application-level agent inspection (state, 
 
 ## Features
 
-- **Application-level debugging**: See agent state, messages, tool calls, state diffs
+- **Application-level inspection**: See agent state, messages, tool calls, state diffs
 - **Code-level debugging**: Set breakpoints, step through code, inspect variables
 - **Agent-level breakpoints**: Break on node start, tool call, or state change
-- **Optional renderers/providers**:  Hooks to render custom state, store, tools, chat output, and state mutation
-- **`import agent_debugger as adb; adb.set_trace()`**: Drop into the debugger from anywhere in your agent code
+- **Optional renderers/providers**:  Interfaces to render custom state, store, tools, chat output, and state mutation
+- ** Drop-in breakpoints **: Drop into the debugger from anywhere in your agent code with `breakpoint()` statement
 
 ## Motivation
 
