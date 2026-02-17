@@ -2,6 +2,8 @@
 
 A terminal UI debugger that combines application-level agent inspection (state, memory, tool calls, messages) with Python-level debugging (breakpoints, stepping, variable inspection).
 
+<img width="1679" height="1016" alt="image" src="https://github.com/user-attachments/assets/85f77ac9-45fc-4b66-ade9-bf79d148aa56" />
+
 ## Motivation
 
 An agent developer needs to answer two kinds of questions simultaneously:
