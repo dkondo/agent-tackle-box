@@ -55,7 +55,7 @@ adb attach my_module:graph \
 
 ```bash
 # Create/update local env from this repo
-uv sync --dev
+uv sync --all-extras
 
 # Run adb directly from source (project root)
 uv run adb run examples/simple_agent.py
