@@ -64,6 +64,26 @@ uv run adb run examples/simple_agent.py
 uv run python -m agent_debugger.cli run examples/simple_agent.py
 ```
 
+### Without LiteLLM (default)
+
+Uses deterministic, mock tool-calling responses — no API keys or network needed:
+
+```bash
+uv run adb run examples/simple_agent.py
+```
+
+### With LiteLLM
+
+Uses a real LLM via LiteLLM for tool-calling. Requires `langchain-litellm` (included in extras) and appropriate auth (e.g., Vertex service account / ADC):
+
+```bash
+# Default model (gemini/gemini-2.0-flash)
+USE_LITELLM=1 uv run adb run examples/simple_agent.py
+
+# Custom model
+USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/simple_agent.py
+```
+
 ## Simple Agent Demo
 
 ```bash
