@@ -30,12 +30,13 @@ This avoids event-loop conflicts: Textual keeps rendering while the worker can p
   - `bdb.Bdb` is Python’s standard-library debugger base class; it provides tracing hooks (`user_line`, `user_return`, `user_exception`), line breakpoint support, and step/continue/return control primitives.
   - Receives graph lifecycle callbacks (`on_chain_start/end`, `on_tool_start`).
   - Activates Python tracing only when needed (semantic breakpoints or line breakpoints).
+  - Gets the live frame from Python’s tracing callback (`bdb`) inside the worker thread, so the frame is captured directly from Python runtime tracing hooks at pause time.
   - Emits `BreakpointHit` events and blocks for UI commands when paused.
 - `BreakpointManager` (`agent_debugger/breakpoints.py`):
   - Supports `line`, `node`, `tool`, `state`, and `transition` breakpoints.
   - Tracks enabled state and hit counts.
 - `AgentRunner` (`agent_debugger/runner.py`):
-  - Executes `graph.stream` with `stream_mode=["debug", "values", "updates"]`.
+  - Executes `graph.stream` with `stream_mode=["debug", "values", "updates"]`, which combines internal runtime diagnostics (`debug`), full state snapshots as execution progresses (`values`), and incremental state deltas (`updates`) in a single stream.
   - Normalizes stream chunks into UI events.
   - Extracts tool calls/results from messages, deduplicates events, emits agent responses.
   - Captures backend store snapshots via `snapshot_backend_store`.
