@@ -105,6 +105,17 @@ USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/s
 
 ## Usage
 
+### CLI commands
+
+#### `adb run` vs `adb attach`
+
+- `adb run my_agent.py`: Execute a Python script and auto-detect (or choose via `--graph`) a `CompiledStateGraph` from that script.
+- `adb attach my_module:graph`: Import and debug an already-exposed graph object from a `module:attribute` reference.
+
+Both commands support the same optional debugger extensions (`--store-renderer`, `--state-renderer`, `--output-renderer`, `--tool-renderer`, `--state-mutator`, and `--input-provider`).
+
+### Debugger commands
+
 ```bash
 # Set a breakpoint on a node
 /break node agent
