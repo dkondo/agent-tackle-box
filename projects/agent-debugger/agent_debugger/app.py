@@ -1252,9 +1252,8 @@ class DebuggerApp(App):
   /store                Refresh store panel from backend
   /theme                Toggle light/dark
   /history [n]          Show input history
-  /q or /quit           Quit
+  /q, /quit, q, Ctl-c Ctl-c   Quit
   /help                 Show this help
-  q                     Quit
 """
         chat_log.write(Text.from_markup(help_text))
 

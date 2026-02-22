@@ -134,6 +134,9 @@ Both commands support the same optional debugger extensions (`--store-renderer`,
 
 # Local clear + optional mutator mutation
 /clear memory
+
+# Quit (or press Ctl-c, Ctl-c)
+/q
 ```
 
 See `/help` in the TUI for all commands.
