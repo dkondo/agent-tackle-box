@@ -26,6 +26,36 @@ from textual.widgets import (
 )
 
 from agent_debugger.breakpoints import BreakpointManager
+from agent_debugger.events import (
+    AgentErrorEvent,
+    AgentResponseEvent,
+    BreakpointHit,
+    DebugCommand,
+    NodeEndEvent,
+    NodeStartEvent,
+    RunFinishedEvent,
+    StateUpdateEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
+from agent_debugger.extensions import (
+    ChatOutputRenderer,
+    StateMutationResult,
+    StateMutator,
+    StateRenderer,
+    StoreRenderer,
+    ToolRenderer,
+)
+from agent_debugger.panels.diff import DiffPanel
+from agent_debugger.panels.logs import LogsPanel
+from agent_debugger.panels.messages import MessagesPanel
+from agent_debugger.panels.source import SourcePanel
+from agent_debugger.panels.stack import StackPanel
+from agent_debugger.panels.state import StatePanel
+from agent_debugger.panels.store import StorePanel
+from agent_debugger.panels.tools import ToolCallRecord, ToolCallsPanel
+from agent_debugger.panels.variables import VariablesPanel
+from agent_debugger.runner import AgentRunner
 
 
 class DebugInput(Input):
@@ -58,37 +88,6 @@ class DebugInput(Input):
 
         super()._on_key(event)
 
-
-from agent_debugger.events import (
-    AgentErrorEvent,
-    AgentResponseEvent,
-    BreakpointHit,
-    DebugCommand,
-    NodeEndEvent,
-    NodeStartEvent,
-    RunFinishedEvent,
-    StateUpdateEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
-from agent_debugger.extensions import (
-    ChatOutputRenderer,
-    StateMutationResult,
-    StateMutator,
-    StateRenderer,
-    StoreRenderer,
-    ToolRenderer,
-)
-from agent_debugger.panels.diff import DiffPanel
-from agent_debugger.panels.logs import LogsPanel
-from agent_debugger.panels.messages import MessagesPanel
-from agent_debugger.panels.source import SourcePanel
-from agent_debugger.panels.stack import StackPanel
-from agent_debugger.panels.state import StatePanel
-from agent_debugger.panels.store import StorePanel
-from agent_debugger.panels.tools import ToolCallRecord, ToolCallsPanel
-from agent_debugger.panels.variables import VariablesPanel
-from agent_debugger.runner import AgentRunner
 
 # Spinner frames for "Thinking..." animation
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -1272,6 +1271,7 @@ class DebuggerApp(App):
   ` t                   Tools tab
   ` s                   Source tab
   ` d                   Diff tab
+  ` b                   Breakpoints tab
   ` l                   Logs tab
   /messages /tools      Switch bottom tab
   /source /diff /logs   Switch bottom tab
