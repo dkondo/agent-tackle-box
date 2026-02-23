@@ -26,6 +26,39 @@ from textual.widgets import (
 )
 
 from agent_debugger.breakpoints import BreakpointManager
+
+
+class DebugInput(Input):
+    """Input subclass that intercepts backtick prefix sequences for tab navigation.
+
+    Press ` then m/t/s/d/l to switch bottom tabs, even while typing.
+    """
+
+    def _on_key(self, event: Key) -> None:
+        app = self.app
+        if app._backtick_pending:
+            app._backtick_pending = False
+            tab_id = app._BACKTICK_TAB_MAP.get(event.key)
+            if tab_id is not None:
+                event.prevent_default()
+                event.stop()
+                app.action_focus_tab(tab_id)
+                return
+            # Not a tab key — insert the buffered backtick, then
+            # let Input handle the current key normally.
+            super()._on_key(Key("grave_accent", "`"))
+            super()._on_key(event)
+            return
+
+        if event.key == "grave_accent":
+            app._backtick_pending = True
+            event.prevent_default()
+            event.stop()
+            return
+
+        super()._on_key(event)
+
+
 from agent_debugger.events import (
     AgentErrorEvent,
     AgentResponseEvent,
@@ -192,12 +225,8 @@ class DebuggerApp(App):
         Binding("n", "step_over", "StepOver", show=True),
         Binding("s", "step_into", "StepInto", show=True),
         Binding("r", "step_out", "StepOut", show=True),
-        # Tab navigation
-        Binding("shift+m", "focus_tab('messages-tab')", "Messages"),
-        Binding("shift+t", "focus_tab('tools-tab')", "Tools"),
-        Binding("shift+s", "focus_tab('source-tab')", "Source"),
-        Binding("shift+d", "focus_tab('diff-tab')", "Diff"),
-        Binding("shift+l", "focus_tab('logs-tab')", "Logs"),
+        # Tab navigation is handled via backtick prefix key sequence
+        # (see on_key). Not shown in footer.
         # Other
         Binding("b", "toggle_bottom", "Bottom", show=True),
         Binding("f9", "toggle_breakpoint_prompt", "Break"),
@@ -246,6 +275,7 @@ class DebuggerApp(App):
         self._last_store_had_data = False
         self._poll_timer = None
         self._turn_counter = 0
+        self._backtick_pending = False
 
     def compose(self) -> ComposeResult:
         """Compose the IDE layout."""
@@ -255,7 +285,7 @@ class DebuggerApp(App):
             with Vertical(id="left-pane"):
                 yield ChatLog(id="chat-log", highlight=True, markup=True)
                 yield Label("", id="spinner-label")
-                yield Input(
+                yield DebugInput(
                     placeholder="Enter message or /command...",
                     id="chat-input",
                 )
@@ -1238,11 +1268,11 @@ class DebuggerApp(App):
   /c /n /s /r           Slash aliases for debug commands
 
 [cyan]Navigation:[/cyan]
-  Shift+M               Messages tab
-  Shift+T               Tools tab
-  Shift+S               Source tab
-  Shift+D               Diff tab
-  Shift+L               Logs tab
+  ` m                   Messages tab
+  ` t                   Tools tab
+  ` s                   Source tab
+  ` d                   Diff tab
+  ` l                   Logs tab
   /messages /tools      Switch bottom tab
   /source /diff /logs   Switch bottom tab
   b                     Toggle bottom panel
@@ -1335,6 +1365,39 @@ class DebuggerApp(App):
                 json.dump(self._input_history[-500:], f, indent=2)
         except Exception as e:
             self._log(f"Failed to save command history: {e}", "warning")
+
+    # ------------------------------------------------------------------
+    # Backtick prefix key sequence for tab navigation
+    # ------------------------------------------------------------------
+
+    _BACKTICK_TAB_MAP: dict[str, str] = {
+        "m": "messages-tab",
+        "t": "tools-tab",
+        "s": "source-tab",
+        "d": "diff-tab",
+        "b": "bp-tab",
+        "l": "logs-tab",
+    }
+
+    def on_key(self, event: Key) -> None:
+        """Handle backtick prefix key sequence for tab navigation.
+
+        Press ` then m/t/s/d/l to switch tabs. Works regardless of
+        which widget has focus.
+        """
+        if self._backtick_pending:
+            self._backtick_pending = False
+            tab_id = self._BACKTICK_TAB_MAP.get(event.key)
+            if tab_id is not None:
+                event.prevent_default()
+                event.stop()
+                self.action_focus_tab(tab_id)
+            return
+
+        if event.key == "grave_accent":
+            self._backtick_pending = True
+            event.prevent_default()
+            event.stop()
 
     # ------------------------------------------------------------------
     # Actions
