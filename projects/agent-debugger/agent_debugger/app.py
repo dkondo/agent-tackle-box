@@ -462,6 +462,88 @@ class DebuggerApp(App):
         # Run in worker thread
         self.runner.invoke(message)
 
+    def _invoke_replay(self, *, pause_on_entry: bool) -> bool:
+        """Invoke graph replay from the current replay cursor."""
+        if pause_on_entry:
+            self.runner.arm_pause_on_replay_start()
+
+        self._processing = True
+        self._previous_state = self._current_state.copy()
+        self._last_response_signature = None
+        self._suppress_breakpoint_chat_once = False
+        self._start_spinner()
+
+        started = self.runner.invoke_replay()
+        if not started:
+            self._processing = False
+            self._stop_spinner()
+            self._resume_input()
+            return False
+        self._log("Replay execution started.", "info")
+        return True
+
+    def _clear_breakpoint_context(self) -> None:
+        """Clear panels that only make sense for an active paused frame."""
+        self._at_breakpoint = False
+        self._suppress_breakpoint_chat_once = False
+        self.query_one("#source-panel", SourcePanel).clear_source()
+        self.query_one("#vars-panel", VariablesPanel).clear_frame()
+        self.query_one("#stack-panel", StackPanel).clear_frame()
+        self.query_one("#state-panel", StatePanel).set_current_node(None)
+        try:
+            self.query_one("#vars-collapsible", Collapsible).collapsed = True
+            self.query_one("#stack-collapsible", Collapsible).collapsed = True
+        except Exception as e:
+            self._log(f"Failed to collapse breakpoint panels: {e}", "warning")
+        self._resume_input()
+
+    def _apply_replay_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """Apply a replay snapshot to UI panels without executing the graph."""
+        self._clear_breakpoint_context()
+        self._previous_state = self._current_state.copy()
+
+        values = snapshot.get("values", {})
+        if not isinstance(values, dict):
+            values = {}
+        self._current_state = values
+        self._update_state_panel(values)
+
+        messages = values.get("messages", [])
+        if isinstance(messages, list):
+            self.query_one("#messages-panel", MessagesPanel).update_messages(messages)
+
+        self.query_one("#diff-panel", DiffPanel).update_diff(self._previous_state, values)
+        store_items, store_source, store_error = self.runner.get_store_snapshot()
+        self._update_store_panel(
+            StateUpdateEvent(
+                values=values,
+                store_items=store_items,
+                store_source=store_source,
+                store_error=store_error,
+                checkpoint_id=(
+                    str(snapshot.get("checkpoint_id"))
+                    if snapshot.get("checkpoint_id") is not None
+                    else None
+                ),
+                checkpoint_config=(
+                    snapshot.get("checkpoint_config")
+                    if isinstance(snapshot.get("checkpoint_config"), dict)
+                    else None
+                ),
+                checkpoint_step=(
+                    snapshot.get("checkpoint_step")
+                    if isinstance(snapshot.get("checkpoint_step"), int)
+                    else None
+                ),
+                next_nodes=(
+                    [str(node) for node in snapshot.get("next_nodes", [])]
+                    if isinstance(snapshot.get("next_nodes"), list)
+                    else []
+                ),
+            )
+        )
+        self._maybe_auto_expand_store(store_items)
+
     # ------------------------------------------------------------------
     # Event polling
     # ------------------------------------------------------------------
@@ -1093,6 +1175,33 @@ class DebuggerApp(App):
                     return
                 bp = self.bp_manager.add_node(name)
                 chat_log.write(Text(f"Breakpoint set: {bp}", style="green"))
+                if self._processing:
+                    chat_log.write(
+                        Text(
+                            "Auto-seek skipped while agent is running.",
+                            style="yellow",
+                        )
+                    )
+                else:
+                    supported, reason = self.runner.supports_replay()
+                    if supported:
+                        ok, message, snapshot = self.runner.seek_nearest_to_node(name)
+                        if ok and snapshot is not None:
+                            self._apply_replay_snapshot(snapshot)
+                            chat_log.write(Text(message, style="green"))
+                            if self._invoke_replay(pause_on_entry=True):
+                                chat_log.write(
+                                    Text(
+                                        "Replay resumed. Stepping will activate at breakpoint.",
+                                        style="green",
+                                    )
+                                )
+                            else:
+                                chat_log.write(Text("Failed to start replay.", style="red"))
+                        else:
+                            chat_log.write(Text(message, style="yellow"))
+                    else:
+                        chat_log.write(Text(f"Replay unavailable: {reason}", style="dim"))
             elif bp_type == "tool" and name:
                 bp = self.bp_manager.add_tool(name)
                 chat_log.write(Text(f"Breakpoint set: {bp}", style="green"))
@@ -1138,6 +1247,48 @@ class DebuggerApp(App):
                 )
             self._refresh_breakpoints_panel()
             self._update_input_placeholder()
+
+        elif command in ("/rewind", "/forward", "/foward"):
+            if self._processing:
+                chat_log.write(Text("Agent is busy, please wait.", style="yellow"))
+                return
+            if len(args) < 2 or args[0].lower() != "node":
+                chat_log.write(
+                    Text(
+                        "Usage: /rewind node <name> or /forward node <name>",
+                        style="yellow",
+                    )
+                )
+                return
+
+            node_name = args[1]
+            available_nodes = self._available_graph_nodes()
+            if available_nodes is not None and node_name not in available_nodes:
+                available = ", ".join(sorted(available_nodes))
+                chat_log.write(
+                    Text(
+                        f"Error: node '{node_name}' does not exist. Available nodes: {available}",
+                        style="red",
+                    )
+                )
+                return
+
+            supported, reason = self.runner.supports_replay()
+            if not supported:
+                chat_log.write(Text(f"Replay unavailable: {reason}", style="yellow"))
+                return
+
+            if command == "/rewind":
+                ok, message, snapshot = self.runner.seek_backward_to_node(node_name)
+            else:
+                ok, message, snapshot = self.runner.seek_forward_to_node(node_name)
+
+            if not ok or snapshot is None:
+                chat_log.write(Text(message, style="yellow"))
+                return
+
+            self._apply_replay_snapshot(snapshot)
+            chat_log.write(Text(message, style="green"))
 
         elif command == "/breakpoints" or command == "/bp":
             self._refresh_breakpoints_panel()
@@ -1249,12 +1400,15 @@ class DebuggerApp(App):
 [bold cyan]adb Commands:[/bold cyan]
 
 [cyan]Breakpoints:[/cyan]
-  /break node <name>    Break when graph node starts
+  /break node <name>    Set node breakpoint + auto-seek + replay
   /break tool <name>    Break when tool is called
   /break state <key>    Break when state key changes
   /break transition     Break on every node transition
   /break line file:42   Standard Python breakpoint
   /breakpoints          Show all breakpoints
+  /rewind node <name>   Move replay cursor to prior node checkpoint
+  /forward node <name>  Move replay cursor to later node checkpoint
+  /foward node <name>   Alias for /forward
   /clear bp             Clear all breakpoints
   /clear [local]        Clear local chat/panels/snapshot metadata
   /clear <mutation>     Local clear + optional mutator mutation

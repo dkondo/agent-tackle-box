@@ -80,6 +80,22 @@ Store data is backend-first and separate from graph state:
 - Store panel never infers backend data from state when no backend snapshot exists.
 - `StateUpdateEvent` carries both state and store metadata (`store_items`, `store_source`, `store_error`).
 
+## Replay Seek Design (`/rewind` and `/forward`)
+Replay seek uses checkpoint history as a state cursor, not as an implicit breakpoint.
+
+- Preconditions: replay requires a checkpointed graph plus a thread context (`--thread-id`).
+- Source of truth: `AgentRunner` reads checkpoint history via graph state APIs and tracks checkpoint metadata (`checkpoint_id`, next nodes, step, config).
+- `/rewind node <name>` and `/forward node <name>`:
+  - Seek only. They move the replay cursor to a prior/later checkpoint where `<name>` appears in `next`.
+  - They update UI panels from the target snapshot, but do not set breakpoints and do not start execution.
+- `/break node <name>` integration:
+  - Sets the node breakpoint.
+  - If replay is available, auto-seeks to the nearest matching checkpoint and resumes replay.
+  - Arms pause-on-entry so execution stops with a real Python frame, enabling normal stepping (`c/n/s/r`).
+- Direction policy: nearest-node seek prefers forward checkpoints on distance ties.
+
+This separation keeps rewind/forward deterministic and side-effect free, while still letting breakpoint-driven replay enter normal step debugging when explicitly requested.
+
 
 ## End-to-End Flow
 1. User enters text in the TUI.

@@ -71,6 +71,11 @@ class AgentRunner:
         self._store_namespace_prefix = store_namespace_prefix
         self._store_max_namespaces = store_max_namespaces
         self._store_items_per_namespace = store_items_per_namespace
+        self._replay_checkpoints: list[dict[str, Any]] = []
+        self._replay_checkpoint_index: dict[str, int] = {}
+        self._current_checkpoint_id: str | None = None
+        self._cursor_config: dict[str, Any] | None = None
+        self._pause_on_replay_start: bool = False
 
     def configure(
         self,
@@ -86,13 +91,37 @@ class AgentRunner:
         """Start a new agent invocation in the worker thread."""
         self._thread = threading.Thread(
             target=self._run_in_thread,
-            args=(message,),
+            args=(message, False),
             daemon=True,
             name="adb-agent-worker",
         )
         self._thread.start()
 
-    def _run_in_thread(self, message: str) -> None:
+    def invoke_replay(self) -> bool:
+        """Start replay execution from the active replay cursor."""
+        checkpoint_id = self.current_checkpoint_id
+        if not checkpoint_id:
+            self.event_queue.put(
+                AgentErrorEvent(
+                    message=(
+                        "Replay cursor is not set. Run /rewind node <name> "
+                        "or /forward node <name> first."
+                    )
+                )
+            )
+            self.event_queue.put(RunFinishedEvent())
+            return False
+
+        self._thread = threading.Thread(
+            target=self._run_in_thread,
+            args=(None, True),
+            daemon=True,
+            name="adb-agent-worker",
+        )
+        self._thread.start()
+        return True
+
+    def _run_in_thread(self, message: str | None, replay: bool) -> None:
         """Run the agent synchronously in the worker thread.
 
         IMPORTANT: Uses graph.stream() (sync) instead of graph.astream()
@@ -111,10 +140,15 @@ class AgentRunner:
         self._last_state_signature = None
         self._last_state_for_breakpoints = {}
 
-        if self._input_provider is not None:
-            input_data = self._input_provider.build_input(message)
+        if replay:
+            input_data = None
+            if self._pause_on_replay_start:
+                self.tracer.request_break_on_next_user_frame()
+                self._pause_on_replay_start = False
+        elif self._input_provider is not None:
+            input_data = self._input_provider.build_input(message or "")
         else:
-            input_data = {"messages": [{"role": "human", "content": message}]}
+            input_data = {"messages": [{"role": "human", "content": message or ""}]}
         config = self._build_runtime_config(include_callbacks=True)
 
         try:
@@ -139,13 +173,43 @@ class AgentRunner:
             payload = data.get("payload", {})
 
             if event_type == "checkpoint":
-                values = payload.get("values", {})
-                next_nodes = payload.get("next", [])
+                values_raw = payload.get("values", {})
+                values = values_raw if isinstance(values_raw, dict) else {}
+                next_raw = payload.get("next", [])
+                next_nodes = (
+                    [str(node) for node in next_raw]
+                    if isinstance(next_raw, (list, tuple))
+                    else []
+                )
+                checkpoint_config = payload.get("config")
+                checkpoint_id = self._extract_checkpoint_id(checkpoint_config)
+                metadata = payload.get("metadata", {})
+                stream_step_raw = data.get("step", 0)
+                stream_step = stream_step_raw if isinstance(stream_step_raw, int) else 0
+                checkpoint_step = None
+                if isinstance(metadata, dict):
+                    step = metadata.get("step")
+                    if isinstance(step, int):
+                        checkpoint_step = step
+                if checkpoint_id and isinstance(checkpoint_config, dict):
+                    self._register_checkpoint(
+                        checkpoint_id=checkpoint_id,
+                        checkpoint_config=checkpoint_config,
+                        next_nodes=next_nodes,
+                        step=checkpoint_step if checkpoint_step is not None else stream_step,
+                        timestamp=data.get("timestamp"),
+                    )
+                    self.set_replay_cursor(checkpoint_config)
                 self.tracer.update_graph_state(values)
                 self._emit_state_update(
                     values=values,
-                    step=data.get("step", 0),
+                    step=stream_step,
                     next_nodes=next_nodes,
+                    checkpoint_id=checkpoint_id,
+                    checkpoint_config=(
+                        checkpoint_config if isinstance(checkpoint_config, dict) else None
+                    ),
+                    checkpoint_step=checkpoint_step,
                 )
 
                 # Extract tool calls and results from messages
@@ -261,6 +325,63 @@ class AgentRunner:
         """Whether the agent is currently running."""
         return self._thread is not None and self._thread.is_alive()
 
+    @property
+    def current_checkpoint_id(self) -> str | None:
+        """Return the active replay checkpoint id."""
+        return self._current_checkpoint_id
+
+    def arm_pause_on_replay_start(self) -> None:
+        """Pause at the next user frame when replay execution starts."""
+        self._pause_on_replay_start = True
+
+    def supports_replay(self) -> tuple[bool, str]:
+        """Whether graph replay is available for the current runner."""
+        checkpointer = getattr(self.graph, "checkpointer", None)
+        if checkpointer is None:
+            return False, "Replay requires a graph checkpointer."
+        if not self._thread_id:
+            return False, "Replay requires --thread-id."
+        if not hasattr(self.graph, "get_state_history") or not hasattr(self.graph, "get_state"):
+            return False, "Graph does not support state history APIs."
+        return True, "ok"
+
+    def set_replay_cursor(self, checkpoint_config: dict[str, Any]) -> tuple[bool, str]:
+        """Set the replay cursor config and active checkpoint id."""
+        configurable = checkpoint_config.get("configurable")
+        if not isinstance(configurable, dict):
+            return False, "Checkpoint config is missing 'configurable'."
+
+        checkpoint_id = configurable.get("checkpoint_id")
+        if checkpoint_id is None:
+            return False, "Checkpoint config is missing checkpoint_id."
+
+        normalized_config = dict(checkpoint_config)
+        normalized_config["configurable"] = dict(configurable)
+        self._cursor_config = normalized_config
+        self._current_checkpoint_id = str(checkpoint_id)
+        return True, "Replay cursor updated."
+
+    def seek_backward_to_node(
+        self,
+        node_name: str,
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        """Move replay cursor to the previous checkpoint targeting a node."""
+        return self._seek_to_node(node_name=node_name, direction="backward")
+
+    def seek_forward_to_node(
+        self,
+        node_name: str,
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        """Move replay cursor to the next checkpoint targeting a node."""
+        return self._seek_to_node(node_name=node_name, direction="forward")
+
+    def seek_nearest_to_node(
+        self,
+        node_name: str,
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        """Move replay cursor to the nearest checkpoint targeting a node."""
+        return self._seek_to_node(node_name=node_name, direction="nearest")
+
     def _build_runtime_config(self, *, include_callbacks: bool) -> dict[str, Any]:
         """Build runtime config from configured options."""
         config: dict[str, Any] = {}
@@ -271,7 +392,195 @@ class AgentRunner:
         if self._thread_id:
             config.setdefault("configurable", {})
             config["configurable"]["thread_id"] = self._thread_id
+        if self._cursor_config:
+            cursor_cfg = self._cursor_config.get("configurable")
+            if isinstance(cursor_cfg, dict):
+                config.setdefault("configurable", {})
+                config["configurable"].update(cursor_cfg)
         return config
+
+    def _seek_to_node(
+        self,
+        *,
+        node_name: str,
+        direction: str,
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        """Seek the replay cursor to a checkpoint that schedules a node."""
+        supported, reason = self.supports_replay()
+        if not supported:
+            return False, reason, None
+
+        try:
+            history = self._replay_history()
+        except Exception as e:
+            logger.exception("Failed to load checkpoint history")
+            return False, f"Failed to load checkpoint history: {e}", None
+        if not history:
+            return False, "No checkpoint history is available for this thread.", None
+
+        current_idx = self._current_history_index(history)
+        target_idx = self._find_target_history_index(
+            history=history,
+            current_idx=current_idx,
+            node_name=node_name,
+            direction=direction,
+        )
+        if target_idx is None:
+            return False, f"No {direction} checkpoint found for node '{node_name}'.", None
+
+        snapshot = history[target_idx]
+        checkpoint_config = getattr(snapshot, "config", None)
+        if not isinstance(checkpoint_config, dict):
+            return False, "Target checkpoint is missing config metadata.", None
+
+        ok, cursor_msg = self.set_replay_cursor(checkpoint_config)
+        if not ok:
+            return False, cursor_msg, None
+
+        payload = self._snapshot_to_payload(snapshot)
+        target_id = payload.get("checkpoint_id", "unknown")
+        if target_idx == current_idx:
+            msg = f"Already at node '{node_name}' checkpoint ({target_id})."
+        else:
+            verb = "rewound" if target_idx < current_idx else "forwarded"
+            msg = f"Replay cursor {verb} to node '{node_name}' ({target_id})."
+        payload["target_index"] = target_idx
+        payload["current_index"] = current_idx
+        return True, msg, payload
+
+    def _replay_history(self) -> list[Any]:
+        """Return thread checkpoint history in chronological order."""
+        base_config = self._build_runtime_config(include_callbacks=False)
+        configurable = base_config.get("configurable")
+        history_config: dict[str, Any] = {}
+        if isinstance(configurable, dict):
+            cfg = dict(configurable)
+            cfg.pop("checkpoint_id", None)
+            if cfg:
+                history_config["configurable"] = cfg
+
+        snapshots = list(self.graph.get_state_history(history_config, limit=5000))
+        snapshots.reverse()
+        return snapshots
+
+    def _current_history_index(self, history: list[Any]) -> int:
+        """Resolve active cursor index in chronological history."""
+        id_to_index = {
+            self._extract_checkpoint_id(getattr(snapshot, "config", None)): idx
+            for idx, snapshot in enumerate(history)
+        }
+        checkpoint_id = self._current_checkpoint_id
+        if checkpoint_id and checkpoint_id in id_to_index:
+            return id_to_index[checkpoint_id]
+        return max(0, len(history) - 1)
+
+    def _find_target_history_index(
+        self,
+        *,
+        history: list[Any],
+        current_idx: int,
+        node_name: str,
+        direction: str,
+    ) -> int | None:
+        """Find target checkpoint index for a node search direction."""
+        if direction == "backward":
+            for idx in range(current_idx - 1, -1, -1):
+                if node_name in self._snapshot_next_nodes(history[idx]):
+                    return idx
+            return None
+
+        if direction == "forward":
+            for idx in range(current_idx + 1, len(history)):
+                if node_name in self._snapshot_next_nodes(history[idx]):
+                    return idx
+            return None
+
+        if direction == "nearest":
+            matches: list[tuple[int, int, int]] = []
+            for idx, snapshot in enumerate(history):
+                if node_name not in self._snapshot_next_nodes(snapshot):
+                    continue
+                distance = abs(idx - current_idx)
+                if idx > current_idx:
+                    tie_priority = 0
+                elif idx < current_idx:
+                    tie_priority = 1
+                else:
+                    tie_priority = -1
+                matches.append((distance, tie_priority, idx))
+            if not matches:
+                return None
+            matches.sort()
+            return matches[0][2]
+
+        return None
+
+    @staticmethod
+    def _snapshot_next_nodes(snapshot: Any) -> list[str]:
+        """Normalize a StateSnapshot.next value to list[str]."""
+        next_nodes = getattr(snapshot, "next", ())
+        if isinstance(next_nodes, (list, tuple)):
+            return [str(node) for node in next_nodes]
+        return []
+
+    def _snapshot_to_payload(self, snapshot: Any) -> dict[str, Any]:
+        """Convert a checkpoint snapshot to UI-friendly replay payload."""
+        values = getattr(snapshot, "values", {})
+        if not isinstance(values, dict):
+            values = {}
+        checkpoint_config = getattr(snapshot, "config", None)
+        checkpoint_id = self._extract_checkpoint_id(checkpoint_config)
+        metadata = getattr(snapshot, "metadata", None)
+        checkpoint_step = None
+        if isinstance(metadata, dict):
+            step = metadata.get("step")
+            if isinstance(step, int):
+                checkpoint_step = step
+
+        return {
+            "values": values,
+            "next_nodes": self._snapshot_next_nodes(snapshot),
+            "checkpoint_id": checkpoint_id,
+            "checkpoint_config": checkpoint_config if isinstance(checkpoint_config, dict) else None,
+            "checkpoint_step": checkpoint_step,
+        }
+
+    @staticmethod
+    def _extract_checkpoint_id(checkpoint_config: dict[str, Any] | None) -> str | None:
+        """Extract checkpoint_id from config payload."""
+        if not isinstance(checkpoint_config, dict):
+            return None
+        configurable = checkpoint_config.get("configurable")
+        if not isinstance(configurable, dict):
+            return None
+        checkpoint_id = configurable.get("checkpoint_id")
+        if checkpoint_id is None:
+            return None
+        return str(checkpoint_id)
+
+    def _register_checkpoint(
+        self,
+        *,
+        checkpoint_id: str,
+        checkpoint_config: dict[str, Any],
+        next_nodes: list[str],
+        step: int,
+        timestamp: str | None,
+    ) -> None:
+        """Record a checkpoint seen during stream processing."""
+        entry = {
+            "checkpoint_id": checkpoint_id,
+            "checkpoint_config": dict(checkpoint_config),
+            "next_nodes": list(next_nodes),
+            "step": step,
+            "timestamp": timestamp,
+        }
+        existing = self._replay_checkpoint_index.get(checkpoint_id)
+        if existing is None:
+            self._replay_checkpoint_index[checkpoint_id] = len(self._replay_checkpoints)
+            self._replay_checkpoints.append(entry)
+            return
+        self._replay_checkpoints[existing] = entry
 
     def _emit_state_update(
         self,
@@ -279,6 +588,9 @@ class AgentRunner:
         *,
         step: int = 0,
         next_nodes: list[str] | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_config: dict[str, Any] | None = None,
+        checkpoint_step: int | None = None,
     ) -> None:
         """Emit StateUpdateEvent only when state changed."""
         if self.bp_manager.should_break_on_state(self._last_state_for_breakpoints, values):
@@ -294,6 +606,10 @@ class AgentRunner:
                     "store_items": store_items,
                     "store_source": store_source,
                     "store_error": store_error,
+                    "step": step,
+                    "next_nodes": next_nodes or [],
+                    "checkpoint_id": checkpoint_id,
+                    "checkpoint_step": checkpoint_step,
                 },
                 sort_keys=True,
                 default=str,
@@ -313,6 +629,9 @@ class AgentRunner:
                 store_error=store_error,
                 step=step,
                 next_nodes=next_nodes or [],
+                checkpoint_id=checkpoint_id,
+                checkpoint_config=checkpoint_config,
+                checkpoint_step=checkpoint_step,
             )
         )
 

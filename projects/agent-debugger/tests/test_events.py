@@ -64,10 +64,15 @@ class TestEvents:
             values={"messages": [1, 2]},
             step=3,
             next_nodes=["tools"],
+            checkpoint_id="cp-1",
+            checkpoint_config={"configurable": {"checkpoint_id": "cp-1"}},
+            checkpoint_step=8,
         )
         assert event.next_nodes == ["tools"]
         assert event.store_source == "none"
         assert event.store_error is None
+        assert event.checkpoint_id == "cp-1"
+        assert event.checkpoint_step == 8
 
     def test_breakpoint_hit_fills_from_frame(self):
         # Get a real frame

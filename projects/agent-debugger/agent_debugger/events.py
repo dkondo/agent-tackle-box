@@ -78,6 +78,9 @@ class StateUpdateEvent:
     store_error: str | None = None
     step: int = 0
     next_nodes: list[str] = field(default_factory=list)
+    checkpoint_id: str | None = None
+    checkpoint_config: dict[str, Any] | None = None
+    checkpoint_step: int | None = None
 
 
 @dataclass

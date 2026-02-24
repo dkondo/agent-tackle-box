@@ -155,6 +155,138 @@ async def test_break_node_missing_shows_error_and_does_not_add_breakpoint():
 
 
 @pytest.mark.asyncio
+async def test_rewind_node_reports_when_replay_unavailable():
+    """Rewind command should explain replay prerequisites when unavailable."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        inp = app.query_one("#chat-input")
+        inp.value = "/rewind node echo"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert app.bp_manager.breakpoints == []
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("Replay unavailable:" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_rewind_node_seek_only_applies_snapshot(monkeypatch):
+    """Rewind should seek/apply snapshot without creating breakpoints or replaying."""
+    app = _make_app()
+    called = {"seek": False, "replay": False}
+    snapshot = {
+        "values": {"messages": [{"role": "human", "content": "hi"}], "x": 1},
+        "next_nodes": ["echo"],
+        "checkpoint_id": "cp-1",
+        "checkpoint_config": {"configurable": {"thread_id": "thr", "checkpoint_id": "cp-1"}},
+        "checkpoint_step": 4,
+    }
+
+    monkeypatch.setattr(app.runner, "supports_replay", lambda: (True, "ok"))
+
+    def _seek(node_name):
+        called["seek"] = True
+        assert node_name == "echo"
+        return True, "rewound", snapshot
+
+    def _invoke_replay():
+        called["replay"] = True
+        return True
+
+    monkeypatch.setattr(app.runner, "seek_backward_to_node", _seek)
+    monkeypatch.setattr(app.runner, "invoke_replay", _invoke_replay)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        inp = app.query_one("#chat-input")
+        inp.value = "/rewind node echo"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert called["seek"] is True
+        assert called["replay"] is False
+        assert app.bp_manager.breakpoints == []
+        assert app._current_state.get("x") == 1
+
+
+@pytest.mark.asyncio
+async def test_foward_alias_uses_forward_seek(monkeypatch):
+    """`/foward` typo alias should map to forward seek."""
+    app = _make_app()
+    called = {"forward": False}
+    snapshot = {
+        "values": {"messages": [{"role": "human", "content": "hi"}], "y": 2},
+        "next_nodes": ["echo"],
+        "checkpoint_id": "cp-2",
+        "checkpoint_config": {"configurable": {"thread_id": "thr", "checkpoint_id": "cp-2"}},
+        "checkpoint_step": 5,
+    }
+
+    monkeypatch.setattr(app.runner, "supports_replay", lambda: (True, "ok"))
+
+    def _forward(node_name):
+        called["forward"] = True
+        assert node_name == "echo"
+        return True, "forwarded", snapshot
+
+    monkeypatch.setattr(app.runner, "seek_forward_to_node", _forward)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        inp = app.query_one("#chat-input")
+        inp.value = "/foward node echo"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert called["forward"] is True
+        assert app._current_state.get("y") == 2
+
+
+@pytest.mark.asyncio
+async def test_break_node_auto_seeks_and_starts_replay(monkeypatch):
+    """`/break node` should set breakpoint, auto-seek, then start replay."""
+    app = _make_app()
+    called = {"seek": False, "arm": False, "replay": False}
+    snapshot = {
+        "values": {"messages": [{"role": "human", "content": "hi"}], "z": 3},
+        "next_nodes": ["echo"],
+        "checkpoint_id": "cp-3",
+        "checkpoint_config": {"configurable": {"thread_id": "thr", "checkpoint_id": "cp-3"}},
+        "checkpoint_step": 6,
+    }
+
+    monkeypatch.setattr(app.runner, "supports_replay", lambda: (True, "ok"))
+
+    def _nearest(node_name):
+        called["seek"] = True
+        assert node_name == "echo"
+        return True, "seeked", snapshot
+
+    def _arm():
+        called["arm"] = True
+
+    def _invoke_replay():
+        called["replay"] = True
+        return True
+
+    monkeypatch.setattr(app.runner, "seek_nearest_to_node", _nearest)
+    monkeypatch.setattr(app.runner, "arm_pause_on_replay_start", _arm)
+    monkeypatch.setattr(app.runner, "invoke_replay", _invoke_replay)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        inp = app.query_one("#chat-input")
+        inp.value = "/break node echo"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert len(app.bp_manager.breakpoints) == 1
+        assert app.bp_manager.breakpoints[0].name == "echo"
+        assert called["seek"] is True
+        assert called["arm"] is True
+        assert called["replay"] is True
+        assert app._current_state.get("z") == 3
+
+
+@pytest.mark.asyncio
 async def test_breakpoint_banner_not_repeated_when_stepping():
     """Stepping should not append duplicate breakpoint chat banners."""
     app = _make_app()

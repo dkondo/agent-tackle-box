@@ -117,7 +117,9 @@ Both commands support the same optional debugger extensions (`--store-renderer`,
 ### Debugger commands
 
 ```bash
-# Set a breakpoint on a node
+# Set a breakpoint on a node.
+# If replay is available, adb auto-seeks to the nearest checkpoint
+# for that node and starts replay so stepping works immediately.
 /break node agent
 
 # Set a breakpoint on a tool
@@ -128,6 +130,11 @@ Both commands support the same optional debugger extensions (`--store-renderer`,
 
 # Standard Python breakpoint
 /break line my_agent.py:42
+
+# Seek replay cursor (seek only, no breakpoint created)
+/rewind node agent
+/forward node agent
+/foward node agent   # alias for /forward
 
 # Clear local UI context
 /clear
@@ -140,6 +147,8 @@ Both commands support the same optional debugger extensions (`--store-renderer`,
 ```
 
 See `/help` in the TUI for all commands.
+
+Replay commands require a checkpointed graph and a thread id (`--thread-id`).
 
 ## Programmatic Breakpoints
 
