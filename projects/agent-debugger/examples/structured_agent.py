@@ -27,6 +27,14 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
+WELCOME = (
+    "Demo: structured-content recommender.\n"
+    "Try: 'give me ideas', 'cheap ones', 'premium picks'.\n"
+    "Each AI message content is a dict {'text': ..., 'recommendations': [...]}.\n"
+    "By default adb extracts and shows just the text. Use --raw-chat to see "
+    "the full structured payload in the chat pane."
+)
+
 GIFTS = [
     {"id": "g1", "title": "Hand-thrown ceramic mug", "price": 28},
     {"id": "g2", "title": "Vintage wool throw blanket", "price": 64},

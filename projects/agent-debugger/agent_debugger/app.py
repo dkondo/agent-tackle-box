@@ -249,6 +249,7 @@ class DebuggerApp(App):
         state_mutator: StateMutator | None = None,
         state_mutation_provider: StateMutator | None = None,
         raw_chat: bool = False,
+        welcome_message: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -260,6 +261,7 @@ class DebuggerApp(App):
         self.tool_renderer = tool_renderer
         self.state_mutator = state_mutator or state_mutation_provider
         self._raw_chat = raw_chat
+        self._welcome_message = welcome_message
         self.event_queue: Queue = runner.event_queue
         self.command_queue: Queue = runner.command_queue
         self._processing = False
@@ -356,6 +358,10 @@ class DebuggerApp(App):
         chat_log.write(Text("[Type /help for available commands]", style="dim"))
         chat_log.write(Text("=" * 40, style="dim"))
         chat_log.write("")
+        if self._welcome_message:
+            for line in self._welcome_message.splitlines() or [self._welcome_message]:
+                chat_log.write(Text(line, style="italic dim"))
+            chat_log.write("")
 
         self._log("adb started", "info")
 
