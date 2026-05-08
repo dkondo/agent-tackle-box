@@ -249,6 +249,16 @@ Customizes how agent responses appear in the **main chat pane**. This is useful
 when your agent returns structured output (e.g., JSON with a `text` field and
 metadata) and you want to display only the relevant parts.
 
+> **Default behavior:** When no `--output-renderer` is supplied (or when one is
+> supplied but returns no lines for a given payload), `adb` automatically
+> extracts the `"text"` field from JSON-shaped chat content — both `dict` content
+> like `{"text": "hi", "recommendations": [...]}` and JSON-string content like
+> `'{"text": "hi"}'`. Pass `--raw-chat` on `adb run` / `adb attach` to disable
+> this and fall through to the normalized response string (`event.text`, which
+> is what `adb` showed prior to text extraction). For deeper inspection of the
+> full structured payload, use the **State** panel or **Messages** tab.
+
+
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `can_render` | `(payload: Mapping[str, Any]) -> bool` | Return `True` if this renderer handles the given payload. |
@@ -381,6 +391,7 @@ and `StateMutator`.
 | `--store-prefix` | — | Backend store namespace prefix (comma-separated). |
 | `--store-max-namespaces` | `20` | Max store namespaces to display. |
 | `--store-items-per-namespace` | `20` | Max items per namespace to display. |
+| `--raw-chat` | off | Disable default text extraction; show normalized `event.text`. |
 
 ## Design
 

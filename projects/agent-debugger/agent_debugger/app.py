@@ -46,6 +46,7 @@ from agent_debugger.extensions import (
     StoreRenderer,
     ToolRenderer,
 )
+from agent_debugger.message_utils import extract_chat_text
 from agent_debugger.panels.diff import DiffPanel
 from agent_debugger.panels.logs import LogsPanel
 from agent_debugger.panels.messages import MessagesPanel
@@ -247,6 +248,7 @@ class DebuggerApp(App):
         tool_renderer: ToolRenderer | None = None,
         state_mutator: StateMutator | None = None,
         state_mutation_provider: StateMutator | None = None,
+        raw_chat: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -257,6 +259,7 @@ class DebuggerApp(App):
         self.output_renderer = output_renderer
         self.tool_renderer = tool_renderer
         self.state_mutator = state_mutator or state_mutation_provider
+        self._raw_chat = raw_chat
         self.event_queue: Queue = runner.event_queue
         self.command_queue: Queue = runner.command_queue
         self._processing = False
@@ -580,8 +583,14 @@ class DebuggerApp(App):
                 chat_log = self.query_one("#chat-log", ChatLog)
                 chat_log.write("")
                 if not self._render_custom_chat_output(event, chat_log):
-                    if event.text:
-                        chat_log.write(Text(event.text, style="cyan"))
+                    text = event.text
+                    if not self._raw_chat:
+                        original = (event.payload or {}).get("content")
+                        extracted = extract_chat_text(original)
+                        if extracted is not None:
+                            text = extracted
+                    if text:
+                        chat_log.write(Text(text, style="cyan"))
 
         elif isinstance(event, AgentErrorEvent):
             chat_log = self.query_one("#chat-log", ChatLog)

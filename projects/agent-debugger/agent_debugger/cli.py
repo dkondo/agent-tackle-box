@@ -114,6 +114,7 @@ def _run_app(
     store_prefix: tuple[str, ...] | None = None,
     store_max_namespaces: int = 20,
     store_items_per_namespace: int = 20,
+    raw_chat: bool = False,
 ) -> None:
     """Initialize and run the debugger app."""
     from agent_debugger.app import DebuggerApp
@@ -150,6 +151,7 @@ def _run_app(
         output_renderer=output_renderer,
         tool_renderer=tool_renderer,
         state_mutator=state_mutator or state_mutation_provider,
+        raw_chat=raw_chat,
     )
     app.run()
 
@@ -247,6 +249,12 @@ def main() -> None:
     show_default=True,
     help="Maximum number of items per namespace to show.",
 )
+@click.option(
+    "--raw-chat",
+    is_flag=True,
+    default=False,
+    help="Show raw response payload instead of extracting text from JSON-shaped content.",
+)
 def attach(
     graph_ref: str,
     env_file: str,
@@ -260,6 +268,7 @@ def attach(
     store_prefix: str | None,
     store_max_namespaces: int,
     store_items_per_namespace: int,
+    raw_chat: bool,
 ) -> None:
     """Attach to a LangGraph graph object.
 
@@ -309,6 +318,7 @@ def attach(
         store_prefix=_parse_store_prefix(store_prefix),
         store_max_namespaces=max(1, store_max_namespaces),
         store_items_per_namespace=max(1, store_items_per_namespace),
+        raw_chat=raw_chat,
     )
 
 
@@ -384,6 +394,12 @@ def attach(
     show_default=True,
     help="Maximum number of items per namespace to show.",
 )
+@click.option(
+    "--raw-chat",
+    is_flag=True,
+    default=False,
+    help="Show raw response payload instead of extracting text from JSON-shaped content.",
+)
 def run(
     script: str,
     graph_attr: str | None,
@@ -398,6 +414,7 @@ def run(
     store_prefix: str | None,
     store_max_namespaces: int,
     store_items_per_namespace: int,
+    raw_chat: bool,
 ) -> None:
     """Run a script and debug its LangGraph graph.
 
@@ -480,6 +497,7 @@ def run(
         store_prefix=_parse_store_prefix(store_prefix),
         store_max_namespaces=max(1, store_max_namespaces),
         store_items_per_namespace=max(1, store_items_per_namespace),
+        raw_chat=raw_chat,
     )
 
 
