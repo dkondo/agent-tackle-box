@@ -19,6 +19,41 @@ from agent_debugger.message_utils import (
 class MessagesPanel(RichLog):
     """Panel showing full message history."""
 
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize the messages panel with line-wrapping enabled.
+
+        Long structured content (e.g. dict-shaped AI message bodies with
+        `recommendations` lists) would otherwise be clipped at the viewport
+        width with no way to see the rest. Wrap forces the content to flow
+        onto multiple lines so the full payload is visible.
+        """
+        kwargs.setdefault("wrap", True)
+        kwargs.setdefault("min_width", 1)
+        super().__init__(**kwargs)
+
+    def write(  # type: ignore[override]
+        self,
+        content: Any,
+        width: int | None = None,
+        expand: bool = False,
+        shrink: bool = True,
+        scroll_end: bool | None = None,
+        animate: bool = False,
+    ) -> MessagesPanel:
+        """Write content forced to wrap at the current container width."""
+        if self.wrap and width is None and self._size_known:
+            content_width = self.scrollable_content_region.width
+            if content_width > 0:
+                width = content_width
+        return super().write(  # type: ignore[return-value]
+            content,
+            width=width,
+            expand=expand,
+            shrink=shrink,
+            scroll_end=scroll_end,
+            animate=animate,
+        )
+
     def update_messages(self, messages: list[Any]) -> None:
         """Update the messages display."""
         self.clear()
