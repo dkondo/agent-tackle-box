@@ -52,22 +52,36 @@ def _user_text(state: dict[str, Any]) -> str:
     return str(getattr(last, "content", "")).lower()
 
 
+def _format_text(lead: str, picks: list[dict[str, Any]]) -> str:
+    """Format the human-readable text including the picks themselves.
+
+    Putting the formatted list in `text` (rather than just a lead sentence)
+    means adb's default extraction renders the full meaningful response.
+    The structured `recommendations` field is still available for programmatic
+    consumers via the State/Messages panels or a custom --output-renderer.
+    """
+    lines = [lead]
+    for i, pick in enumerate(picks, start=1):
+        lines.append(f"  {i}. {pick['title']} (${pick['price']})")
+    return "\n".join(lines)
+
+
 def recommender(state: dict[str, Any]) -> dict[str, Any]:
     """Produce a dict-style AI message whose content is itself a dict."""
     user_text = _user_text(state)
 
     if "expensive" in user_text or "premium" in user_text:
         picks = [g for g in GIFTS if g["price"] >= 50]
-        text = "Here are some premium picks for you:"
+        lead = "Here are some premium picks for you:"
     elif "cheap" in user_text or "budget" in user_text:
         picks = [g for g in GIFTS if g["price"] < 30]
-        text = "Here are some budget-friendly picks:"
+        lead = "Here are some budget-friendly picks:"
     else:
         picks = GIFTS
-        text = "Here are a few gift ideas:"
+        lead = "Here are a few gift ideas:"
 
     structured_content = {
-        "text": text,
+        "text": _format_text(lead, picks),
         "recommendations": picks,
         "metadata": {"agent": "structured_agent", "version": 1},
     }

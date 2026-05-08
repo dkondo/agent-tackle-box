@@ -103,6 +103,30 @@ USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/s
   --state-mutator examples.simple_extensions:SimpleStateMutator
 ```
 
+## Structured Agent Demo
+
+`examples/structured_agent.py` is a minimal LangGraph agent whose AI message
+`content` is a dict (`{"text": ..., "recommendations": [...], "metadata": ...}`)
+instead of a plain string. Useful for understanding adb's default text
+extraction and the `--raw-chat` flag, and for testing a custom
+`ChatOutputRenderer` against structured content.
+
+```bash
+# Default: adb extracts the "text" field and shows just that in the chat pane
+uv run adb run examples/structured_agent.py
+
+# --raw-chat: disable extraction and show the normalized event.text
+uv run adb run examples/structured_agent.py --raw-chat
+```
+
+Try inputs like `give me ideas`, `cheap ones`, or `premium picks`. The chat
+pane shows the extracted text; the State and Messages panels render the full
+structured payload (recommendations + metadata).
+
+The example also exports a `WELCOME` constant — adb auto-renders it in the
+chat pane on launch as a short explainer. Define `WELCOME = "..."` in your
+own scripts to do the same.
+
 ## Usage
 
 ### CLI commands
