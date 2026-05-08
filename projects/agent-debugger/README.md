@@ -74,15 +74,22 @@ uv run adb run examples/simple_agent.py
 
 ### With LiteLLM
 
-Uses a real LLM via LiteLLM for tool-calling. Requires `langchain-litellm` (included in extras) and appropriate auth (e.g., Vertex service account / ADC):
+Uses a real LLM via LiteLLM for tool-calling. Requires `langchain-litellm` (included in extras). Pick the auth path that matches your environment:
 
 ```bash
-# Default model (gemini/gemini-2.0-flash)
+# 1. AI Studio (Gemini API key) — default model is gemini/gemini-2.0-flash
+#    Requires GEMINI_API_KEY in .env (get one at https://aistudio.google.com/apikey)
 USE_LITELLM=1 uv run adb run examples/simple_agent.py
 
-# Custom model
+# 2. Vertex AI (service account / ADC)
 USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/simple_agent.py
+
+# 3. OpenAI-compatible LiteLLM proxy
+#    Requires OPENAI_API_KEY and OPENAI_BASE_URL in .env (point at your proxy)
+USE_LITELLM=1 LITELLM_MODEL=openai/gpt-4o-mini uv run adb run examples/simple_agent.py
 ```
+
+The `LITELLM_MODEL` value's prefix decides which provider LiteLLM routes through (`gemini/...`, `vertex_ai/...`, `openai/...`, `anthropic/...`, etc.) and which env vars it reads for auth. See the [LiteLLM provider docs](https://docs.litellm.ai/docs/providers) for the full list.
 
 ## Simple Agent Demo
 
@@ -112,11 +119,15 @@ extraction and the `--raw-chat` flag, and for testing a custom
 `ChatOutputRenderer` against structured content.
 
 ```bash
-# Default: adb extracts the "text" field and shows just that in the chat pane
+# Default: deterministic recommender, no API keys required
 uv run adb run examples/structured_agent.py
 
 # --raw-chat: disable extraction and show the normalized event.text
 uv run adb run examples/structured_agent.py --raw-chat
+
+# LLM mode: route through LiteLLM (uses OPENAI_API_KEY / OPENAI_BASE_URL,
+# default model openai/gpt-4o-mini). Override the model via LITELLM_MODEL.
+USE_LITELLM=1 uv run adb run examples/structured_agent.py
 ```
 
 Try inputs like `give me ideas`, `cheap ones`, or `premium picks`. The chat
