@@ -10,10 +10,7 @@ def test_extract_from_dict_with_text() -> None:
 
 
 def test_extract_from_dict_with_text_and_extra_fields() -> None:
-    assert (
-        extract_chat_text({"text": "hello", "recommendations": [{"id": 1}]})
-        == "hello"
-    )
+    assert extract_chat_text({"text": "hello", "recommendations": [{"id": 1}]}) == "hello"
 
 
 def test_extract_from_dict_without_text_returns_none() -> None:
