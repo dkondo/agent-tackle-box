@@ -74,15 +74,22 @@ uv run adb run examples/simple_agent.py
 
 ### With LiteLLM
 
-Uses a real LLM via LiteLLM for tool-calling. Requires `langchain-litellm` (included in extras) and appropriate auth (e.g., Vertex service account / ADC):
+Uses a real LLM via LiteLLM for tool-calling. Requires `langchain-litellm` (included in extras). Pick the auth path that matches your environment:
 
 ```bash
-# Default model (gemini/gemini-2.0-flash)
+# 1. AI Studio (Gemini API key) — default model is gemini/gemini-2.0-flash
+#    Requires GEMINI_API_KEY in .env (get one at https://aistudio.google.com/apikey)
 USE_LITELLM=1 uv run adb run examples/simple_agent.py
 
-# Custom model
+# 2. Vertex AI (service account / ADC)
 USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/simple_agent.py
+
+# 3. OpenAI-compatible LiteLLM proxy
+#    Requires OPENAI_API_KEY and OPENAI_BASE_URL in .env (point at your proxy)
+USE_LITELLM=1 LITELLM_MODEL=openai/gpt-4o-mini uv run adb run examples/simple_agent.py
 ```
+
+The `LITELLM_MODEL` value's prefix decides which provider LiteLLM routes through (`gemini/...`, `vertex_ai/...`, `openai/...`, `anthropic/...`, etc.) and which env vars it reads for auth. See the [LiteLLM provider docs](https://docs.litellm.ai/docs/providers) for the full list.
 
 ## Simple Agent Demo
 
@@ -102,6 +109,34 @@ USE_LITELLM=1 LITELLM_MODEL=vertex_ai/gemini-2.0-flash uv run adb run examples/s
   --tool-renderer examples.simple_extensions:SimpleToolRenderer \
   --state-mutator examples.simple_extensions:SimpleStateMutator
 ```
+
+## Structured Agent Demo
+
+`examples/structured_agent.py` is a minimal LangGraph agent whose AI message
+`content` is a dict (`{"text": ..., "recommendations": [...], "metadata": ...}`)
+instead of a plain string. Useful for understanding adb's default text
+extraction and the `--raw-chat` flag, and for testing a custom
+`ChatOutputRenderer` against structured content.
+
+```bash
+# Default: deterministic recommender, no API keys required
+uv run adb run examples/structured_agent.py
+
+# --raw-chat: disable extraction and show the normalized event.text
+uv run adb run examples/structured_agent.py --raw-chat
+
+# LLM mode: route through LiteLLM (uses OPENAI_API_KEY / OPENAI_BASE_URL,
+# default model openai/gpt-4o-mini). Override the model via LITELLM_MODEL.
+USE_LITELLM=1 uv run adb run examples/structured_agent.py
+```
+
+Try inputs like `give me ideas`, `cheap ones`, or `premium picks`. The chat
+pane shows the extracted text; the State and Messages panels render the full
+structured payload (recommendations + metadata).
+
+The example also exports a `WELCOME` constant — adb auto-renders it in the
+chat pane on launch as a short explainer. Define `WELCOME = "..."` in your
+own scripts to do the same.
 
 ## Usage
 
@@ -249,6 +284,16 @@ Customizes how agent responses appear in the **main chat pane**. This is useful
 when your agent returns structured output (e.g., JSON with a `text` field and
 metadata) and you want to display only the relevant parts.
 
+> **Default behavior:** When no `--output-renderer` is supplied (or when one is
+> supplied but returns no lines for a given payload), `adb` automatically
+> extracts the `"text"` field from JSON-shaped chat content — both `dict` content
+> like `{"text": "hi", "recommendations": [...]}` and JSON-string content like
+> `'{"text": "hi"}'`. Pass `--raw-chat` on `adb run` / `adb attach` to disable
+> this and fall through to the normalized response string (`event.text`, which
+> is what `adb` showed prior to text extraction). For deeper inspection of the
+> full structured payload, use the **State** panel or **Messages** tab.
+
+
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `can_render` | `(payload: Mapping[str, Any]) -> bool` | Return `True` if this renderer handles the given payload. |
@@ -381,6 +426,7 @@ and `StateMutator`.
 | `--store-prefix` | — | Backend store namespace prefix (comma-separated). |
 | `--store-max-namespaces` | `20` | Max store namespaces to display. |
 | `--store-items-per-namespace` | `20` | Max items per namespace to display. |
+| `--raw-chat` | off | Disable default text extraction; show normalized `event.text`. |
 
 ## Design
 

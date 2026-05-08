@@ -67,6 +67,7 @@ def _make_app(
     output_renderer=None,
     tool_renderer=None,
     state_mutator=None,
+    raw_chat=False,
 ):
     """Create a DebuggerApp for testing."""
     graph = _make_graph()
@@ -82,6 +83,7 @@ def _make_app(
         output_renderer=output_renderer,
         tool_renderer=tool_renderer,
         state_mutator=state_mutator,
+        raw_chat=raw_chat,
     )
 
 
@@ -543,6 +545,167 @@ async def test_output_renderer_empty_lines_falls_back_to_plain_text():
         chat_log = app.query_one("#chat-log")
         lines_text = [line.text for line in chat_log.lines]
         assert any("fallback text" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_default_extracts_text_from_dict_content():
+    """Dict content with a 'text' field should render as just the text."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text="{'text': 'hello world', 'recommendations': [{'id': 1}]}",
+                payload={
+                    "type": "ai",
+                    "content": {"text": "hello world", "recommendations": [{"id": 1}]},
+                },
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("hello world" in text for text in lines_text)
+        assert not any("recommendations" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_default_extracts_text_from_json_string_content():
+    """JSON-string content with a 'text' field should render as just the text."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text='{"text": "hi from json", "extra": 1}',
+                payload={
+                    "type": "ai",
+                    "content": '{"text": "hi from json", "extra": 1}',
+                },
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("hi from json" in text for text in lines_text)
+        assert not any('"extra"' in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_default_falls_back_when_no_text_key():
+    """Dict content without a 'text' field should fall back to event.text."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text="raw fallback",
+                payload={
+                    "type": "ai",
+                    "content": {"foo": "bar"},
+                },
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("raw fallback" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_default_falls_back_on_malformed_json():
+    """Malformed JSON content should fall back to event.text without raising."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text="raw fallback",
+                payload={
+                    "type": "ai",
+                    "content": "{not valid json",
+                },
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("raw fallback" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_raw_chat_flag_bypasses_extraction():
+    """raw_chat=True should show event.text verbatim even when payload has dict content."""
+    app = _make_app(raw_chat=True)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text="{'text': 'hello world'}",
+                payload={
+                    "type": "ai",
+                    "content": {"text": "hello world", "recommendations": []},
+                },
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        # raw mode shows the full event.text repr
+        assert any("'text'" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_empty_text_field_does_not_silently_drop_message():
+    """A payload with empty 'text' but other useful fields should still render
+    something (the fallback event.text) rather than silently disappearing."""
+    app = _make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text="response with empty text",
+                payload={
+                    "type": "ai",
+                    "content": {"text": "", "recommendations": [{"id": 1}]},
+                },
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("response with empty text" in text for text in lines_text)
+
+
+@pytest.mark.asyncio
+async def test_user_renderer_wins_over_default_extraction():
+    """A user-supplied renderer that claims the payload should run instead of the default."""
+
+    class _OutputRenderer:
+        def can_render(self, payload):
+            return isinstance(payload.get("content"), dict)
+
+        def render_chat_output(self, payload, state, messages):
+            return ChatRenderModel(lines=["[bold green]custom render[/bold green]"])
+
+    app = _make_app(output_renderer=_OutputRenderer())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._handle_event(
+            AgentResponseEvent(
+                text="raw fallback",
+                payload={
+                    "type": "ai",
+                    "content": {"text": "should not appear"},
+                },
+            )
+        )
+        await pilot.pause()
+
+        chat_log = app.query_one("#chat-log")
+        lines_text = [line.text for line in chat_log.lines]
+        assert any("custom render" in text for text in lines_text)
+        assert not any("should not appear" in text for text in lines_text)
+        assert not any("raw fallback" in text for text in lines_text)
 
 
 @pytest.mark.asyncio
@@ -1164,6 +1327,41 @@ def test_runner_emits_tool_result_for_role_tool_messages():
     assert tool_result is not None
     assert tool_result.tool_call_id == "call_1"
     assert tool_result.result == "ok"
+
+
+def test_runner_emits_response_per_invocation_even_with_identical_content():
+    """Two turns producing identical AI text should emit two AgentResponseEvents.
+
+    Regression: _seen_responses used to persist across invocations, so a canned
+    agent (e.g. always returning "Hey friend!") would only render the first turn's
+    response in the chat pane — turn 2 was silently deduped at the runner level.
+    """
+    eq: Queue = Queue()
+    cq: Queue = Queue()
+    bp = BreakpointManager()
+    runner = AgentRunner(graph=object(), event_queue=eq, command_queue=cq, bp_manager=bp)
+
+    canned_msg = {"type": "ai", "content": "Hey friend! Great to see you."}
+
+    runner._emit_agent_response(canned_msg)
+    runner._emit_agent_response(canned_msg)  # within same invocation: deduped
+
+    first_events = []
+    while not eq.empty():
+        first_events.append(eq.get_nowait())
+    assert len(first_events) == 1, "within an invocation, identical msg should dedup"
+
+    # Simulate the start of a new invocation. _run_in_thread clears _seen_responses
+    # so that the same canned message can render again on a subsequent turn.
+    runner._seen_responses = set()
+
+    runner._emit_agent_response(canned_msg)
+    second_events = []
+    while not eq.empty():
+        second_events.append(eq.get_nowait())
+    assert len(second_events) == 1, "new invocation should re-emit identical content"
+    assert isinstance(second_events[0], AgentResponseEvent)
+    assert second_events[0].text == "Hey friend! Great to see you."
 
 
 @pytest.mark.asyncio

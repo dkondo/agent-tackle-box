@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 _TYPE_ALIASES = {
@@ -58,3 +59,28 @@ def content_to_text(content: Any) -> str:
                 parts.append(str(item))
         return " ".join(parts).strip()
     return str(content)
+
+
+def extract_chat_text(content: Any) -> str | None:
+    """Extract user-facing text from JSON-shaped content.
+
+    Returns the value of a "text" field when content is a dict with a non-empty
+    string "text" key, or a JSON-string that parses to such a dict. Returns
+    None otherwise (caller should fall back to its own default). Empty strings
+    return None so callers preserve their original fallback path instead of
+    silently rendering nothing when a payload has blank text plus useful metadata.
+    """
+    if isinstance(content, str):
+        stripped = content.lstrip()
+        if not stripped.startswith("{"):
+            return None
+        try:
+            parsed = json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        content = parsed
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str) and text:
+            return text
+    return None

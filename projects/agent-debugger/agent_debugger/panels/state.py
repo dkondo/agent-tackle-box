@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from rich.text import Text
 from textual.widgets import Static
 
 from agent_debugger.message_utils import (
+    extract_chat_text,
     message_content,
     message_name,
     message_tool_calls,
@@ -53,15 +53,9 @@ class StatePanel(Static):
 
     def _format_content(self, content: Any, max_len: int = 50) -> str:
         """Format message content for display."""
-        if isinstance(content, str) and content.startswith("{"):
-            try:
-                parsed = json.loads(content)
-                if isinstance(parsed, dict) and "text" in parsed:
-                    content = parsed["text"]
-            except (json.JSONDecodeError, ValueError):
-                pass
-        if isinstance(content, dict) and "text" in content:
-            content = content["text"]
+        extracted = extract_chat_text(content)
+        if extracted is not None:
+            content = extracted
         elif isinstance(content, list):
             parts = []
             for item in content:

@@ -327,3 +327,64 @@ def test_attach_loads_input_provider(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert isinstance(captured["input_provider"], DummyInputProvider)
+
+
+def test_attach_raw_chat_flag_forwards_to_run_app(monkeypatch):
+    """attach should forward --raw-chat to _run_app."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_app(graph, thread_id=None, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli, "_load_graph", lambda _: object())
+    monkeypatch.setattr(cli, "_run_app", _fake_run_app)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["attach", "dummy.module:graph", "--raw-chat"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["raw_chat"] is True
+
+
+def test_attach_raw_chat_default_is_false(monkeypatch):
+    """raw_chat should default to False when --raw-chat is not passed."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_app(graph, thread_id=None, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli, "_load_graph", lambda _: object())
+    monkeypatch.setattr(cli, "_run_app", _fake_run_app)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["attach", "dummy.module:graph"])
+
+    assert result.exit_code == 0, result.output
+    assert captured["raw_chat"] is False
+
+
+def test_run_raw_chat_flag_forwards_to_run_app(monkeypatch):
+    """run should forward --raw-chat to _run_app."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_app(graph, thread_id=None, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli, "_run_app", _fake_run_app)
+
+    script = Path("tests/_tmp_raw_chat_script.py")
+    script.write_text("graph = object()\n", encoding="utf-8")
+    try:
+        runner = CliRunner()
+        result = runner.invoke(
+            cli.main,
+            ["run", str(script), "--graph", "graph", "--raw-chat"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert captured["raw_chat"] is True
+    finally:
+        script.unlink(missing_ok=True)
