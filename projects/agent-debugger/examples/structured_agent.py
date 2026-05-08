@@ -1,9 +1,15 @@
 """Example agent that returns structured (dict-shaped) AI message content.
 
-Demonstrates adb's default text extraction. The agent's AIMessage content is a
-dict like {"text": "...", "recommendations": [...]} instead of a plain string,
-which is a common pattern when an agent returns both display text and
-metadata (e.g. product recommendations, citations, action buttons).
+Demonstrates adb's default text extraction. The agent emits dict-style messages
+(rather than typed AIMessage objects) so the AI message `content` is itself a
+dict like {"text": "...", "recommendations": [...]} instead of a plain string.
+This is the realistic shape when an agent wants to surface both display text
+and structured metadata (e.g. product recommendations, citations, action
+buttons) in the same message.
+
+LangChain's typed AIMessage rejects dict content via Pydantic validation, so we
+use plain dicts in state -- LangGraph accepts these as long as message_type
+returns "ai".
 
 By default, adb extracts the "text" field and shows just that in the chat pane.
 The full structured payload is still visible in the State and Messages panels.
@@ -19,7 +25,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
 GIFTS = [
@@ -29,15 +34,19 @@ GIFTS = [
 ]
 
 
-def recommender(state: dict[str, Any]) -> dict[str, Any]:
-    """Produce an AIMessage whose content is a dict with text + recommendations."""
+def _user_text(state: dict[str, Any]) -> str:
     messages = state.get("messages", [])
-    last = messages[-1] if messages else None
-    user_text = ""
+    if not messages:
+        return ""
+    last = messages[-1]
     if isinstance(last, dict):
-        user_text = str(last.get("content", "")).lower()
-    elif last is not None:
-        user_text = str(getattr(last, "content", "")).lower()
+        return str(last.get("content", "")).lower()
+    return str(getattr(last, "content", "")).lower()
+
+
+def recommender(state: dict[str, Any]) -> dict[str, Any]:
+    """Produce a dict-style AI message whose content is itself a dict."""
+    user_text = _user_text(state)
 
     if "expensive" in user_text or "premium" in user_text:
         picks = [g for g in GIFTS if g["price"] >= 50]
@@ -55,7 +64,9 @@ def recommender(state: dict[str, Any]) -> dict[str, Any]:
         "metadata": {"agent": "structured_agent", "version": 1},
     }
 
-    return {"messages": [AIMessage(content=structured_content)]}
+    # Use a plain dict instead of AIMessage. Pydantic-typed AIMessage rejects
+    # dict content; plain-dict messages flow through LangGraph state untouched.
+    return {"messages": [{"role": "ai", "content": structured_content}]}
 
 
 builder = StateGraph(dict)
