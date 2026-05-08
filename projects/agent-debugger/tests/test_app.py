@@ -1329,6 +1329,41 @@ def test_runner_emits_tool_result_for_role_tool_messages():
     assert tool_result.result == "ok"
 
 
+def test_runner_emits_response_per_invocation_even_with_identical_content():
+    """Two turns producing identical AI text should emit two AgentResponseEvents.
+
+    Regression: _seen_responses used to persist across invocations, so a canned
+    agent (e.g. always returning "Hey friend!") would only render the first turn's
+    response in the chat pane — turn 2 was silently deduped at the runner level.
+    """
+    eq: Queue = Queue()
+    cq: Queue = Queue()
+    bp = BreakpointManager()
+    runner = AgentRunner(graph=object(), event_queue=eq, command_queue=cq, bp_manager=bp)
+
+    canned_msg = {"type": "ai", "content": "Hey friend! Great to see you."}
+
+    runner._emit_agent_response(canned_msg)
+    runner._emit_agent_response(canned_msg)  # within same invocation: deduped
+
+    first_events = []
+    while not eq.empty():
+        first_events.append(eq.get_nowait())
+    assert len(first_events) == 1, "within an invocation, identical msg should dedup"
+
+    # Simulate the start of a new invocation. _run_in_thread clears _seen_responses
+    # so that the same canned message can render again on a subsequent turn.
+    runner._seen_responses = set()
+
+    runner._emit_agent_response(canned_msg)
+    second_events = []
+    while not eq.empty():
+        second_events.append(eq.get_nowait())
+    assert len(second_events) == 1, "new invocation should re-emit identical content"
+    assert isinstance(second_events[0], AgentResponseEvent)
+    assert second_events[0].text == "Hey friend! Great to see you."
+
+
 @pytest.mark.asyncio
 async def test_messages_panel_renders_assistant_role_content():
     """Messages panel should render OpenAI-style assistant roles."""

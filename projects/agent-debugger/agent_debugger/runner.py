@@ -103,11 +103,19 @@ class AgentRunner:
         """
         self.tracer.reset_step()
         self._run_count += 1
-        # NOTE: _seen_tool_calls, _seen_tool_results, and _seen_responses
-        # are intentionally NOT cleared between invocations.  The full
-        # message history is re-scanned on each stream chunk, and resetting
-        # these sets would cause historical tool calls / responses to be
-        # re-emitted to the UI on every turn.
+        # NOTE: _seen_tool_calls and _seen_tool_results are intentionally
+        # NOT cleared between invocations.  The full message history is
+        # re-scanned on each stream chunk, and resetting these sets would
+        # cause historical tool calls / results to be re-emitted to the
+        # UI on every turn.
+        #
+        # _seen_responses IS cleared because _emit_agent_response only
+        # looks at messages[-1] on each stream chunk -- so within a single
+        # invocation we only need to dedup the (values, updates) double
+        # emission of the same final message. Across invocations, two
+        # turns producing identical AI text (e.g. canned greetings) are
+        # NOT duplicates -- they are distinct responses.
+        self._seen_responses = set()
         self._last_state_signature = None
         self._last_state_for_breakpoints = {}
 
