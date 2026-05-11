@@ -25,13 +25,21 @@ class MessagesPanel(RichLog):
         Long structured content (e.g. dict-shaped AI message bodies with
         `recommendations` lists) would otherwise be clipped at the viewport
         width. ``wrap=True`` lets RichLog flow content onto multiple lines at
-        the actual viewport width when rendered. We intentionally do NOT
-        override ``write()`` to pre-compute the width: RichLog's region size
-        is unreliable when the panel sits inside a TabbedContent that hasn't
-        been fully laid out yet, and passing a stale width=1 makes every
-        character wrap onto its own line.
+        the actual viewport width when rendered.
+
+        ``min_width=1`` is set so wrap stays viewport-relative in narrow
+        terminals/splits. RichLog's default ``min_width`` is 78, which would
+        cause sub-78-col panes to render at width 78 and then clip
+        horizontally instead of wrapping.
+
+        We intentionally do NOT override ``write()`` to pre-compute the
+        width: RichLog's region size is unreliable when the panel sits
+        inside a TabbedContent that hasn't been fully laid out yet, and
+        passing a stale width=1 made every character wrap onto its own
+        line (the bug this docstring exists to prevent regressing into).
         """
         kwargs.setdefault("wrap", True)
+        kwargs.setdefault("min_width", 1)
         super().__init__(**kwargs)
 
     def update_messages(self, messages: list[Any]) -> None:
